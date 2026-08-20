@@ -1,0 +1,143 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { dbHelper } from '@/lib/db';
+import crypto from 'crypto';
+
+// Helper: Calculate SHA-256 hash of a string
+function sha256(text: string): string {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const searchParams = req.nextUrl.searchParams;
+    const manageKey = searchParams.get('manageKey');
+
+    // If manageKey is provided, return metadata safely (for the sender panel)
+    if (manageKey) {
+      const metadata = dbHelper.getPasteMetadata(id);
+      if (!metadata) {
+        return NextResponse.json(
+          { error: 'Paste not found or has expired.' },
+          { status: 404 }
+        );
+      }
+
+      const hash = sha256(manageKey);
+      if (metadata.manage_key_hash !== hash) {
+        return NextResponse.json(
+          { error: 'Unauthorized management key.' },
+          { status: 401 }
+        );
+      }
+
+      return NextResponse.json({
+        id: metadata.id,
+        created_at: metadata.created_at,
+        expires_at: metadata.expires_at,
+        burn_after_read: metadata.burn_after_read === 1,
+        password_protected: metadata.password_protected === 1,
+        view_count: metadata.view_count,
+        read_at: metadata.read_at,
+        is_dead_man: metadata.is_dead_man === 1,
+        check_in_due: metadata.check_in_due,
+        check_in_interval: metadata.check_in_interval,
+      });
+    }
+
+    // Otherwise, fetch the paste content for the recipient
+    const paste = dbHelper.getPaste(id);
+
+    if (!paste) {
+      return NextResponse.json(
+        { error: 'Paste not found, expired, or already burned.' },
+        { status: 404 }
+      );
+    }
+
+    // Dead man's switch enforcement
+    if (paste.is_dead_man === 1 && paste.check_in_due && Date.now() < paste.check_in_due) {
+      return NextResponse.json({
+        id: paste.id,
+        is_dead_man: true,
+        check_in_due: paste.check_in_due,
+        locked: true,
+        created_at: paste.created_at,
+        expires_at: paste.expires_at,
+      });
+    }
+
+    return NextResponse.json({
+      id: paste.id,
+      ciphertext: paste.ciphertext,
+      iv: paste.iv,
+      created_at: paste.created_at,
+      expires_at: paste.expires_at,
+      burn_after_read: paste.burn_after_read === 1,
+      password_protected: paste.password_protected === 1,
+      view_count: paste.view_count,
+      is_dead_man: paste.is_dead_man === 1,
+      check_in_due: paste.check_in_due,
+    });
+  } catch (error: any) {
+    console.error('Error fetching paste:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const searchParams = req.nextUrl.searchParams;
+    const manageKey = searchParams.get('manageKey');
+
+    const metadata = dbHelper.getPasteMetadata(id);
+    if (!metadata) {
+      return NextResponse.json(
+        { error: 'Paste not found.' },
+        { status: 404 }
+      );
+    }
+
+    // Authorize deletion if a management key is set
+    if (metadata.manage_key_hash) {
+      if (!manageKey) {
+        return NextResponse.json(
+          { error: 'Management key is required to delete this paste.' },
+          { status: 401 }
+        );
+      }
+      const hash = sha256(manageKey);
+      if (metadata.manage_key_hash !== hash) {
+        return NextResponse.json(
+          { error: 'Unauthorized management key.' },
+          { status: 401 }
+        );
+      }
+    }
+
+    const deleted = dbHelper.deletePaste(id);
+    if (!deleted) {
+      return NextResponse.json(
+        { error: 'Paste not found or could not be deleted.' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting paste:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
