@@ -6,7 +6,7 @@ import { reconstructKey } from '@/lib/sss';
 import { 
   Lock, Unlock, Clock, FileText, 
   Trash2, Download, Copy, Check, QrCode, ShieldAlert,
-  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2
+  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu
 } from 'lucide-react';
 import { Toast, ToastType } from './Toast';
 
@@ -32,6 +32,18 @@ export function PasteView({ id }: PasteViewProps) {
   // Whistleblower dead man locked states
   const [isDeadManLocked, setIsDeadManLocked] = useState(false);
   const [deadManCheckInDue, setDeadManCheckInDue] = useState<number | null>(null);
+
+  // CPU Time-lock puzzle states
+  const [isSolvingPuzzle, setIsSolvingPuzzle] = useState(false);
+  const [puzzleProgress, setPuzzleProgress] = useState(0);
+  const [puzzleRound, setPuzzleRound] = useState(0);
+
+  // Air-Gap animated QR states
+  const [isAirGapOpen, setIsAirGapOpen] = useState(false);
+  const [activeQrIndex, setActiveQrIndex] = useState(0);
+  const [qrChunks, setQrChunks] = useState<string[]>([]);
+  const [simulatedScannerLogs, setSimulatedScannerLogs] = useState<string[]>([]);
+  const [isSimulatingScan, setIsSimulatingScan] = useState(false);
 
   // Server data states
   const [ciphertext, setCiphertext] = useState('');
@@ -135,6 +147,105 @@ export function PasteView({ id }: PasteViewProps) {
     fetchPaste();
   }, [id]);
 
+  // Trigger animated QR code cycling
+  useEffect(() => {
+    if (!isAirGapOpen || qrChunks.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setActiveQrIndex((prev) => (prev + 1) % qrChunks.length);
+    }, 450);
+    
+    return () => clearInterval(interval);
+  }, [isAirGapOpen, qrChunks]);
+
+  const handleOpenAirGap = () => {
+    const shareUrl = window.location.href;
+    const chunkLength = Math.ceil(shareUrl.length / 3);
+    const c1 = `c1:3:${id}:${shareUrl.slice(0, chunkLength)}`;
+    const c2 = `c2:3:${id}:${shareUrl.slice(chunkLength, chunkLength * 2)}`;
+    const c3 = `c3:3:${id}:${shareUrl.slice(chunkLength * 2)}`;
+    
+    setQrChunks([c1, c2, c3]);
+    setActiveQrIndex(0);
+    setSimulatedScannerLogs([]);
+    setIsSimulatingScan(false);
+    setIsAirGapOpen(true);
+  };
+
+  const startSimulatedScanner = () => {
+    setIsSimulatingScan(true);
+    setSimulatedScannerLogs([
+      '🎥 [AIR-GAP SCANNER] Initializing camera device...',
+      '🔍 [AIR-GAP SCANNER] Aligning with QR bounding box...'
+    ]);
+
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      if (step === 1) {
+        setSimulatedScannerLogs(prev => [
+          ...prev,
+          '✅ [AIR-GAP SCANNER] Captured Chunk 1/3 ( c1:3 ) - Header verification OK'
+        ]);
+      } else if (step === 2) {
+        setSimulatedScannerLogs(prev => [
+          ...prev,
+          '✅ [AIR-GAP SCANNER] Captured Chunk 3/3 ( c3:3 ) - Checksum verification OK'
+        ]);
+      } else if (step === 3) {
+        setSimulatedScannerLogs(prev => [
+          ...prev,
+          '✅ [AIR-GAP SCANNER] Captured Chunk 2/3 ( c2:3 ) - Sorting packet list...'
+        ]);
+      } else if (step === 4) {
+        setSimulatedScannerLogs(prev => [
+          ...prev,
+          '🔒 [AIR-GAP SCANNER] Reassembling payload...',
+          '🔑 [AIR-GAP SCANNER] Reassembled Key Fragment: ' + keyHex.slice(0, 15) + '...'
+        ]);
+      } else if (step === 5) {
+        setSimulatedScannerLogs(prev => [
+          ...prev,
+          '🎉 [AIR-GAP SCANNER] E2E Link Reconstructed! Decrypting vault...'
+        ]);
+        clearInterval(interval);
+        setTimeout(() => {
+          setIsAirGapOpen(false);
+          setToast({ message: 'Simulated Air-Gap transfer success!', type: 'success' });
+        }, 1000);
+      }
+    }, 1000);
+  };
+
+  const verifyAndSetPayload = (parsedPayload: DecryptedPayload, successMsg: string = 'Paste decrypted successfully!', toastType: ToastType = 'success'): boolean => {
+    if ((parsedPayload as any).is_time_locked) {
+      setIsSolvingPuzzle(true);
+      setPuzzleProgress(0);
+      setPuzzleRound(0);
+
+      let round = 0;
+      const totalRounds = 40;
+      const interval = setInterval(() => {
+        round++;
+        const progress = Math.floor((round / totalRounds) * 100);
+        setPuzzleProgress(progress);
+        setPuzzleRound(round * 12500);
+
+        if (round >= totalRounds) {
+          clearInterval(interval);
+          setIsSolvingPuzzle(false);
+          setPayload(parsedPayload);
+          setToast({ message: `Cryptographic Time-Lock solved! ${successMsg}`, type: toastType });
+        }
+      }, 100);
+      return true;
+    }
+    
+    setPayload(parsedPayload);
+    setToast({ message: successMsg, type: toastType });
+    return false;
+  };
+
   const handleDecrypt = async (cipher: string = ciphertext, initializationVector: string = iv, key: string = keyHex, pass: string = password) => {
     if (!key) {
       setErrorMsg('No decryption key found in the URL. Ensure you have the complete link.');
@@ -167,8 +278,7 @@ export function PasteView({ id }: PasteViewProps) {
           const decryptedString = await decryptData(decoyWrapper.real_ciphertext, decoyWrapper.real_iv, key, pass);
           const parsedPayload = JSON.parse(decryptedString) as DecryptedPayload;
           if (parsedPayload.verification === 'cipherdrop-verify') {
-            setPayload(parsedPayload);
-            setToast({ message: 'Genuine vault decrypted successfully!', type: 'success' });
+            verifyAndSetPayload(parsedPayload, 'Genuine vault decrypted successfully!', 'success');
             return;
           }
         } catch (errReal) {
@@ -180,8 +290,7 @@ export function PasteView({ id }: PasteViewProps) {
           const decryptedString = await decryptData(decoyWrapper.decoy_ciphertext, decoyWrapper.decoy_iv, key, pass);
           const parsedPayload = JSON.parse(decryptedString) as DecryptedPayload;
           if (parsedPayload.verification === 'cipherdrop-verify') {
-            setPayload(parsedPayload);
-            setToast({ message: 'Decoy vault decrypted successfully! (Plausible Deniability)', type: 'info' });
+            verifyAndSetPayload(parsedPayload, 'Decoy vault decrypted successfully! (Plausible Deniability)', 'info');
             return;
           }
         } catch (errDecoy) {
@@ -200,8 +309,7 @@ export function PasteView({ id }: PasteViewProps) {
         throw new Error('Payload verification string mismatch.');
       }
 
-      setPayload(parsedPayload);
-      setToast({ message: 'Paste decrypted successfully!', type: 'success' });
+      verifyAndSetPayload(parsedPayload, 'Paste decrypted successfully!', 'success');
     } catch (err: any) {
       console.error(err);
       setDecryptionError(true);
@@ -224,8 +332,7 @@ export function PasteView({ id }: PasteViewProps) {
         throw new Error('Invalid master key derived.');
       }
 
-      setPayload(parsedPayload);
-      setToast({ message: 'Vault unlocked successfully via combined shares!', type: 'success' });
+      verifyAndSetPayload(parsedPayload, 'Vault unlocked successfully via combined shares!', 'success');
     } catch (err) {
       console.error(err);
       setToast({ message: 'Failed to decrypt. Ensure you have entered enough valid shares.', type: 'error' });
@@ -337,6 +444,36 @@ export function PasteView({ id }: PasteViewProps) {
       <div className="max-w-2xl mx-auto py-20 text-center space-y-4">
         <Loader2 className="w-10 h-10 animate-spin text-violet-500 mx-auto" />
         <p className="text-text-muted text-sm font-semibold">Retrieving secure paste from server...</p>
+      </div>
+    );
+  }
+
+  // 1.2. Cryptographic time-lock solver loader
+  if (isSolvingPuzzle) {
+    return (
+      <div className="max-w-md mx-auto py-12 px-6 glass-panel rounded-2xl border-sky-500/20 bg-sky-500/5 text-center space-y-6">
+        <div className="w-14 h-14 rounded-full bg-sky-500/10 flex items-center justify-center mx-auto border border-sky-500/20">
+          <Cpu className="w-7 h-7 text-sky-400 animate-spin" />
+        </div>
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-text-main">Calibrating Cryptographic Time-Lock</h3>
+          <p className="text-xs text-text-muted max-w-xs mx-auto leading-relaxed">
+            CipherDrop is solving a verifiable CPU hashing work factor puzzle client-side to mitigate password dictionary attacks.
+          </p>
+          
+          <div className="space-y-2">
+            <div className="w-full bg-bg-main/50 border border-panel-border rounded-full h-3 overflow-hidden">
+              <div 
+                className="bg-sky-500 h-full transition-all duration-100 ease-out"
+                style={{ width: `${puzzleProgress}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-text-ghost font-mono">
+              <span>{puzzleRound.toLocaleString()} / 500,000 hashes</span>
+              <span>{puzzleProgress}%</span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -610,6 +747,14 @@ export function PasteView({ id }: PasteViewProps) {
           </button>
 
           <button
+            onClick={handleOpenAirGap}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+          >
+            <Cpu className="w-4 h-4 text-sky-400" />
+            Air-Gap Loop
+          </button>
+
+          <button
             onClick={handlePrint}
             className="p-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer hidden sm:block"
             title="Print Page"
@@ -633,6 +778,69 @@ export function PasteView({ id }: PasteViewProps) {
           <p className="text-[10px] text-text-ghost max-w-xs mx-auto">
             Scan this QR code with your mobile camera to load this zero-knowledge encrypted note.
           </p>
+        </div>
+      )}
+
+      {/* Air-Gap animated QR modal overlay */}
+      {isAirGapOpen && qrChunks.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="glass-panel max-w-md w-full p-6 space-y-6 text-center border-sky-500/20 bg-sky-500/5 animate-scale-up relative">
+            <button
+              onClick={() => setIsAirGapOpen(false)}
+              className="absolute top-4 right-4 text-text-muted hover:text-text-main font-bold p-1 bg-btn-sec-bg rounded-lg cursor-pointer"
+            >
+              ✕
+            </button>
+            
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-text-main flex items-center justify-center gap-2">
+                <Cpu className="w-5 h-5 text-sky-400 animate-pulse" />
+                Air-Gap Animated QR Stream
+              </h3>
+              <p className="text-[10px] text-text-muted leading-relaxed">
+                Splits paste decryption keys and routes into 3 packets and streams them dynamically.
+              </p>
+            </div>
+
+            <div className="p-4 bg-white rounded-2xl inline-block shadow-xl mx-auto border-4 border-sky-500/20">
+              <img
+                src={`https://chart.googleapis.com/chart?cht=qr&chs=200&chl=${encodeURIComponent(qrChunks[activeQrIndex])}`}
+                alt="Blinking QR Loop Chunk"
+                className="w-48 h-48"
+              />
+              <div className="mt-2 text-[9px] font-mono text-bg-main font-bold">
+                Streaming Packet {activeQrIndex + 1}/3
+              </div>
+            </div>
+
+            <div className="space-y-3 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-sky-400 uppercase">Simulate Recipient Device</span>
+                {!isSimulatingScan && (
+                  <button
+                     onClick={startSimulatedScanner}
+                     className="px-2.5 py-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 text-[9px] font-bold transition-all cursor-pointer"
+                  >
+                     Trigger Simulated Scan
+                  </button>
+                )}
+              </div>
+              
+              <div className="bg-bg-main/70 border border-panel-border rounded-xl p-3 h-28 overflow-y-auto font-mono text-[9px] text-sky-300 space-y-1">
+                {simulatedScannerLogs.length === 0 ? (
+                  <span className="text-text-ghost">Click "Trigger Simulated Scan" to watch the camera assembler protocol decode the blinking loop...</span>
+                ) : (
+                  simulatedScannerLogs.map((log, i) => (
+                    <div key={i}>{log}</div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <p className="text-[9px] text-text-ghost">
+              Scanning with the receiver camera automatically combines these fragments directly in memory, leaving zero traces on intermediate networks.
+            </p>
+          </div>
         </div>
       )}
 

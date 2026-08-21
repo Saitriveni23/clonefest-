@@ -27,7 +27,8 @@ function getDb(): Database.Database {
         is_dead_man INTEGER DEFAULT 0,
         check_in_due INTEGER,
         check_in_interval INTEGER,
-        check_in_key_hash TEXT
+        check_in_key_hash TEXT,
+        duress_key_hash TEXT
       );
       
       CREATE TABLE IF NOT EXISTS threads (
@@ -60,6 +61,9 @@ function getDb(): Database.Database {
     try {
       dbInstance.exec("ALTER TABLE pastes ADD COLUMN check_in_key_hash TEXT");
     } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN duress_key_hash TEXT");
+    } catch(e){}
   }
   return dbInstance;
 }
@@ -79,6 +83,7 @@ export interface PasteRow {
   check_in_due: number | null;
   check_in_interval: number | null;
   check_in_key_hash: string | null;
+  duress_key_hash: string | null;
 }
 
 export interface ThreadRow {
@@ -103,6 +108,7 @@ export const dbHelper = {
     is_dead_man?: boolean;
     check_in_interval?: number | null;
     check_in_key_hash?: string | null;
+    duress_key_hash?: string | null;
   }): void {
     const db = getDb();
     const createdAt = Date.now();
@@ -117,9 +123,10 @@ export const dbHelper = {
       INSERT INTO pastes (
         id, ciphertext, iv, created_at, expires_at, burn_after_read, 
         password_protected, view_count, manage_key_hash, read_at,
-        is_dead_man, check_in_due, check_in_interval, check_in_key_hash
+        is_dead_man, check_in_due, check_in_interval, check_in_key_hash,
+        duress_key_hash
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?)
     `);
     
     stmt.run(
@@ -134,7 +141,8 @@ export const dbHelper = {
       paste.is_dead_man ? 1 : 0,
       checkInDue,
       paste.check_in_interval || null,
-      paste.check_in_key_hash || null
+      paste.check_in_key_hash || null,
+      paste.duress_key_hash || null
     );
   },
 
@@ -179,7 +187,7 @@ export const dbHelper = {
     const stmt = db.prepare(`
       SELECT id, created_at, expires_at, burn_after_read, password_protected, 
              view_count, manage_key_hash, read_at, is_dead_man, check_in_due, 
-             check_in_interval, check_in_key_hash 
+             check_in_interval, check_in_key_hash, duress_key_hash 
       FROM pastes WHERE id = ?
     `);
     const row = stmt.get(id) as Omit<PasteRow, 'ciphertext' | 'iv'> | undefined;

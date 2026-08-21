@@ -27,6 +27,25 @@ export async function GET(
       }
 
       const hash = sha256(manageKey);
+
+      if (metadata.duress_key_hash === hash) {
+        // Trigger silent coercion self-destruct!
+        dbHelper.deletePaste(id);
+        return NextResponse.json({
+          id: metadata.id,
+          created_at: metadata.created_at,
+          expires_at: metadata.expires_at,
+          burn_after_read: metadata.burn_after_read === 1,
+          password_protected: metadata.password_protected === 1,
+          view_count: metadata.view_count,
+          read_at: null,
+          is_dead_man: metadata.is_dead_man === 1,
+          check_in_due: metadata.check_in_due,
+          check_in_interval: metadata.check_in_interval,
+          is_duress_active: true,
+        });
+      }
+
       if (metadata.manage_key_hash !== hash) {
         return NextResponse.json(
           { error: 'Unauthorized management key.' },

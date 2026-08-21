@@ -8,7 +8,7 @@ import {
   FileText, Code, Lock, Unlock, Calendar, 
   Trash2, Upload, X, Copy, Check, QrCode, ArrowRight, ShieldCheck, Loader2,
   Share2, Users2, MessageSquareCode, Image as ImageIcon, Bot, Download, Eye,
-  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw
+  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw, Cpu
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
@@ -83,6 +83,10 @@ export function PasteForm() {
   const [isDeadMan, setIsDeadMan] = useState(false);
   const [deadManInterval, setDeadManInterval] = useState('86400');
   const [deadManKey, setDeadManKey] = useState('');
+
+  // Time-locked CPU puzzle and Duress self-destruct states
+  const [isTimeLocked, setIsTimeLocked] = useState(false);
+  const [duressKey, setDuressKey] = useState('');
 
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
@@ -280,6 +284,7 @@ export function PasteForm() {
             format: format,
             language: format === 'code' ? language : 'plaintext',
             file: file,
+            is_time_locked: isTimeLocked,
           };
           const realEnc = await encryptData(JSON.stringify(realPayload), keyHex, password);
 
@@ -291,6 +296,7 @@ export function PasteForm() {
             format: 'plaintext',
             language: 'plaintext',
             file: null,
+            is_time_locked: isTimeLocked,
           };
           const decoyEnc = await encryptData(JSON.stringify(decoyPayload), keyHex, decoyPassword);
 
@@ -314,6 +320,7 @@ export function PasteForm() {
             format: format,
             language: format === 'code' ? language : 'plaintext',
             file: file,
+            is_time_locked: isTimeLocked,
           };
           const enc = await encryptData(
             JSON.stringify(payload),
@@ -334,6 +341,11 @@ export function PasteForm() {
           check_in_key_hash = await hashSha256(deadManKey);
         }
 
+        let duress_key_hash = null;
+        if (duressKey) {
+          duress_key_hash = await hashSha256(duressKey);
+        }
+
         const response = await fetch('/api/pastes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -347,6 +359,7 @@ export function PasteForm() {
             is_dead_man: isDeadMan,
             check_in_interval: isDeadMan ? Number(deadManInterval) : null,
             check_in_key_hash,
+            duress_key_hash,
           }),
         });
 
@@ -355,7 +368,8 @@ export function PasteForm() {
 
         setDirectShareUrl(`${window.location.origin}/p/${data.id}#${keyHex}`);
         const deadManHashFragment = isDeadMan ? `&checkin=${deadManKey}` : '';
-        setDirectManageUrl(`${window.location.origin}/p/${data.id}/manage#${manageKey}${deadManHashFragment}`);
+        const duressHashFragment = duressKey ? `&duress=${duressKey}` : '';
+        setDirectManageUrl(`${window.location.origin}/p/${data.id}/manage#${manageKey}${deadManHashFragment}${duressHashFragment}`);
         setSuccessMode('direct');
         triggerConfetti();
 
@@ -1265,7 +1279,7 @@ export function PasteForm() {
                 Cryptographic Innovation Layers
               </span>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Decoy Vault Toggle */}
                 <button
                   type="button"
@@ -1302,6 +1316,23 @@ export function PasteForm() {
                   <div className="flex flex-col space-y-0.5">
                     <span className="text-xs font-bold text-text-main">Dead Man's Switch (Auto-Release)</span>
                     <span className="text-[9px] text-text-ghost">Auto-releases note details only if whistleblower fails to check in before timer expiry.</span>
+                  </div>
+                </button>
+
+                {/* Time-Locked CPU Puzzle Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setIsTimeLocked(!isTimeLocked)}
+                  className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
+                    isTimeLocked 
+                      ? 'border-sky-500/30 bg-sky-500/5' 
+                      : 'border-panel-border bg-btn-sec-bg/50 hover:bg-btn-sec-hover'
+                  }`}
+                >
+                  <Cpu className={`w-6 h-6 shrink-0 mt-0.5 ${isTimeLocked ? 'text-sky-400' : 'text-text-ghost'}`} />
+                  <div className="flex flex-col space-y-0.5">
+                    <span className="text-xs font-bold text-text-main">Time-Locked CPU Puzzle</span>
+                    <span className="text-[9px] text-text-ghost">Requires recipient browser computation for 4s before revealing note.</span>
                   </div>
                 </button>
               </div>
@@ -1387,6 +1418,24 @@ export function PasteForm() {
                   </div>
                 </div>
               )}
+
+              {/* Duress Self-Destruct Switch */}
+              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-3 animate-slide-in">
+                <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 animate-pulse" />
+                  Duress Self-Destruct Key (Optional coercion override)
+                </span>
+                <div className="space-y-1.5 max-w-sm">
+                  <label className="text-[9px] text-text-ghost">Entering this key on the management page immediately deletes the secret.</label>
+                  <input
+                    type="password"
+                    placeholder="Enter Coercion Duress PIN..."
+                    value={duressKey}
+                    onChange={(e) => setDuressKey(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-rose-500"
+                  />
+                </div>
+              </div>
             </div>
           )}
 

@@ -24,6 +24,7 @@ interface PasteMetadata {
   is_dead_man?: boolean;
   check_in_due?: number | null;
   check_in_interval?: number | null;
+  is_duress_active?: boolean;
 }
 
 // Helper: SHA-256 client-side using Web Crypto API
@@ -45,6 +46,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
   const [checkInKey, setCheckInKey] = useState('');
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [isDuressActive, setIsDuressActive] = useState(false);
 
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
@@ -53,6 +55,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
     const hash = window.location.hash;
     let mKey = '';
     let cKey = '';
+    let dKey = '';
     
     if (hash) {
       const cleanHash = hash.substring(1);
@@ -62,14 +65,19 @@ export default function ManagePanel({ id }: ManagePanelProps) {
       if (checkinPart) {
         cKey = checkinPart.split('=')[1];
       }
+      const duressPart = parts.find(p => p.startsWith('duress='));
+      if (duressPart) {
+        dKey = duressPart.split('=')[1];
+      }
     }
 
-    setManageKey(mKey);
+    const keyToQuery = dKey || mKey;
+    setManageKey(keyToQuery);
     if (cKey) {
       setCheckInKey(cKey);
     }
 
-    if (!mKey) {
+    if (!keyToQuery) {
       setErrorMsg('No management key found in the URL. Ensure you have the complete link.');
       setIsLoading(false);
       return;
@@ -77,7 +85,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
     const fetchMetadata = async () => {
       try {
-        const hashedKey = await sha256(mKey);
+        const hashedKey = await sha256(keyToQuery);
         const response = await fetch(`/api/pastes/${id}?manageKey=${hashedKey}`);
         
         if (!response.ok) {
@@ -89,6 +97,9 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
         const data = await response.json();
         setMetadata(data);
+        if (data.is_duress_active) {
+          setIsDuressActive(true);
+        }
       } catch (err: any) {
         console.error(err);
         setErrorMsg(err.message || 'Error occurred fetching status.');
@@ -226,7 +237,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
       )}
 
       {/* Back button */}
-      <div className="flex justify-start">
+      <div className="flex justify-between items-center">
         <Link
           href="/"
           className="flex items-center gap-1.5 text-xs font-semibold text-text-muted hover:text-text-main transition-colors bg-btn-sec-bg px-3.5 py-2 rounded-xl border border-panel-border"
@@ -234,7 +245,28 @@ export default function ManagePanel({ id }: ManagePanelProps) {
           <ArrowLeft className="w-4 h-4" />
           Back to Creator
         </Link>
+
+        {isDuressActive && (
+          <span className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-bold px-3 py-1 rounded-xl uppercase flex items-center gap-1 animate-pulse">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Duress Mode Active
+          </span>
+        )}
       </div>
+
+      {isDuressActive && (
+        <div className="glass-panel border-rose-500/30 bg-rose-500/5 p-5 rounded-2xl flex items-start gap-3.5 text-left animate-slide-in">
+          <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0 mt-0.5 animate-bounce" />
+          <div className="flex flex-col space-y-1">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">
+              Coercion Protection Triggered
+            </span>
+            <span className="text-[10px] text-text-muted leading-relaxed">
+              The encrypted record has been silently wiped from database storage. The management panel is displaying a mock unread status for your safety (plausible deniability cover active).
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-8">
         {/* Title */}

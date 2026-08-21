@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { 
       ciphertext, iv, expires_in_seconds, burn_after_read, password_protected, 
-      manage_key_hash, is_dead_man, check_in_interval, check_in_key_hash 
+      manage_key_hash, is_dead_man, check_in_interval, check_in_key_hash,
+      duress_key_hash
     } = body;
 
     // Validation
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
       is_dead_man: Boolean(is_dead_man),
       check_in_interval: check_in_interval ? Number(check_in_interval) : null,
       check_in_key_hash: check_in_key_hash || null,
+      duress_key_hash: duress_key_hash || null,
     });
 
     return NextResponse.json({ id });
