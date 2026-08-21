@@ -42,12 +42,15 @@ Some features are optional and can be enabled or disabled in the configuration f
 This fork (CipherDrop) extends the core PrivateBin protocol with additional high-impact security features:
 
 1. **Plausible Deniability Decoy Vaults**: Enable decoy mode to set two separate passwords. Password A decrypts the genuine secret, while Password B decrypts an innocuous decoy note.
-2. **Whistleblower Dead Man's Switch**: Refuses ciphertext delivery completely until the countdown timer expires. The creator can reset the timer using a check-in key pre-populated inside the management panel.
-3. **Shamir's Secret Sharing (SSS) Threshold Vaults**: Splits the master AES decryption key into $M$ distinct shares, requiring at least $N$ shares to combine client-side to decrypt the note.
-4. **Covert Steganography Drop**: Encodes paste URLs and keys directly inside the LSB pixels of generated or custom uploaded PNG images.
-5. **Real-time Scrambler Matrix**: Mono-space visual byte terminal scrambling characters next to the editor text area in real-time.
-6. **Voice Notes memo**: In-browser audio recording E2E encrypted client-side.
-7. **Slack Botcommand Simulator**: Automated `/secret` commands encrypting payloads server-side with SubtleCrypto compatibility.
+2. **Coercion Duress PIN (Self-Destruct)**: Senders configure a secondary Duress PIN. Querying the dashboard with this PIN silently deletes the database record immediately while displaying a dummy active status as cover.
+3. **Time-Locked CPU Puzzle**: Recipient browsers solve a verifiable CPU repeated hashing delay puzzle for 4 seconds before revealing the note content, making brute-force dictionary attacks mathematically unfeasible.
+4. **Air-Gapped Animated QR Stream**: Loops decryption keys through 3 blinking QR code packets every 450ms, allowing local data transfers to mobile camera receivers without network packets.
+5. **Whistleblower Dead Man's Switch**: Refuses ciphertext delivery completely until the countdown timer expires. The creator can reset the timer using a check-in key pre-populated inside the management panel.
+6. **Shamir's Secret Sharing (SSS) Threshold Vaults**: Splits the master AES decryption key into $M$ distinct shares, requiring at least $N$ shares to combine client-side to decrypt the note.
+7. **Covert Steganography Drop**: Encodes paste URLs and keys directly inside the LSB pixels of generated or custom uploaded PNG images.
+8. **Real-time Scrambler Matrix**: Mono-space visual byte terminal scrambling characters next to the editor text area in real-time.
+9. **Voice Notes memo**: In-browser audio recording E2E encrypted client-side.
+10. **Slack Botcommand Simulator**: Automated `/secret` commands encrypting payloads server-side with SubtleCrypto compatibility.
 
 ---
 
