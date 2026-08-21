@@ -31,7 +31,9 @@ function getDb(): Database.Database {
         duress_key_hash TEXT,
         max_attempts INTEGER DEFAULT 0,
         failed_attempts INTEGER DEFAULT 0,
-        allowed_countries TEXT
+        allowed_countries TEXT,
+        release_after INTEGER,
+        otp_required INTEGER DEFAULT 0
       );
       
       CREATE TABLE IF NOT EXISTS threads (
@@ -76,6 +78,12 @@ function getDb(): Database.Database {
     try {
       dbInstance.exec("ALTER TABLE pastes ADD COLUMN allowed_countries TEXT");
     } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN release_after INTEGER");
+    } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN otp_required INTEGER DEFAULT 0");
+    } catch(e){}
   }
   return dbInstance;
 }
@@ -99,6 +107,8 @@ export interface PasteRow {
   max_attempts: number;
   failed_attempts: number;
   allowed_countries: string | null;
+  release_after: number | null;
+  otp_required: number;
 }
 
 export interface ThreadRow {
@@ -126,6 +136,8 @@ export const dbHelper = {
     duress_key_hash?: string | null;
     max_attempts?: number;
     allowed_countries?: string | null;
+    release_after?: number | null;
+    otp_required?: boolean;
   }): void {
     const db = getDb();
     const createdAt = Date.now();
@@ -140,9 +152,10 @@ export const dbHelper = {
         id, ciphertext, iv, created_at, expires_at, burn_after_read, 
         password_protected, view_count, manage_key_hash, read_at,
         is_dead_man, check_in_due, check_in_interval, check_in_key_hash,
-        duress_key_hash, max_attempts, failed_attempts, allowed_countries
+        duress_key_hash, max_attempts, failed_attempts, allowed_countries,
+        release_after, otp_required
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
     `);
     
     stmt.run(
@@ -160,7 +173,9 @@ export const dbHelper = {
       paste.check_in_key_hash || null,
       paste.duress_key_hash || null,
       paste.max_attempts || 0,
-      paste.allowed_countries || null
+      paste.allowed_countries || null,
+      paste.release_after || null,
+      paste.otp_required ? 1 : 0
     );
   },
 

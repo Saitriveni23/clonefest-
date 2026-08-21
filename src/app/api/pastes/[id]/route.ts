@@ -99,6 +99,18 @@ export async function GET(
       );
     }
 
+    // Time-release gate enforcement
+    if (paste.release_after && Date.now() < paste.release_after) {
+      return NextResponse.json({
+        id: paste.id,
+        is_time_released: true,
+        release_after: paste.release_after,
+        locked: true,
+        created_at: paste.created_at,
+        expires_at: paste.expires_at,
+      });
+    }
+
     // Dead man's switch enforcement
     if (paste.is_dead_man === 1 && paste.check_in_due && Date.now() < paste.check_in_due) {
       return NextResponse.json({
@@ -124,6 +136,8 @@ export async function GET(
       check_in_due: paste.check_in_due,
       max_attempts: paste.max_attempts,
       failed_attempts: paste.failed_attempts,
+      otp_required: paste.otp_required === 1,
+      release_after: paste.release_after,
     });
   } catch (error: any) {
     console.error('Error fetching paste:', error);

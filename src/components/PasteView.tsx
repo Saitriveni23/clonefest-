@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { decryptData } from '@/lib/crypto';
 import { reconstructKey } from '@/lib/sss';
 import { 
-  Lock, Unlock, Clock, FileText, 
-  Trash2, Download, Copy, Check, QrCode, ShieldAlert,
+  Lock, Unlock, Clock, FileText, Calendar,
+  Trash2, Download, Copy, Check, QrCode, ShieldAlert, ShieldCheck,
   Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu
 } from 'lucide-react';
 import { Toast, ToastType } from './Toast';
@@ -79,6 +79,19 @@ export function PasteView({ id }: PasteViewProps) {
   const [maxAttempts, setMaxAttempts] = useState(0);
   const [failedAttempts, setFailedAttempts] = useState(0);
 
+  // OTP Gate states
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [demoOtp, setDemoOtp] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+
+  // Time-release gate states
+  const [isTimeReleased, setIsTimeReleased] = useState(false);
+  const [releaseAfter, setReleaseAfter] = useState<number | null>(null);
+
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
@@ -101,6 +114,14 @@ export function PasteView({ id }: PasteViewProps) {
 
         const data = await response.json();
 
+        // Check time-release lock state
+        if (data.is_time_released && data.locked) {
+          setIsTimeReleased(true);
+          setReleaseAfter(data.release_after);
+          setIsLoading(false);
+          return;
+        }
+
         // Check dead man switch lock state
         if (data.locked) {
           setIsDeadManLocked(true);
@@ -118,6 +139,11 @@ export function PasteView({ id }: PasteViewProps) {
         setViewCount(data.view_count);
         setMaxAttempts(data.max_attempts || 0);
         setFailedAttempts(data.failed_attempts || 0);
+
+        // If OTP is required, gate access
+        if (data.otp_required) {
+          setOtpRequired(true);
+        }
 
         // Pre-check decoy vault wrappers to force password prompt
         let isDecoy = false;
@@ -504,6 +530,124 @@ export function PasteView({ id }: PasteViewProps) {
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // 1.3. Time-Release lock screen — paste not yet available
+  if (isTimeReleased && releaseAfter) {
+    const releaseDate = new Date(releaseAfter).toLocaleString();
+    const msLeft = releaseAfter - Date.now();
+    const hLeft = Math.floor(msLeft / 3600000);
+    const mLeft = Math.floor((msLeft % 3600000) / 60000);
+    return (
+      <div className="max-w-md mx-auto py-12 px-6 glass-panel rounded-2xl border-violet-500/20 bg-violet-500/5 text-center space-y-6">
+        <div className="w-14 h-14 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto border border-violet-500/20">
+          <Calendar className="w-7 h-7 text-violet-400 animate-pulse" />
+        </div>
+        <div className="space-y-2 text-center">
+          <h3 className="text-lg font-bold text-text-main">⏳ Time-Locked Paste</h3>
+          <p className="text-xs text-text-muted leading-relaxed">
+            The sender has scheduled this paste to be revealed at a future time. Come back then.
+          </p>
+          <div className="p-3.5 bg-violet-500/10 border border-violet-500/20 rounded-xl font-mono text-xs text-violet-300 space-y-1">
+            <p>Unlocks At: <strong>{releaseDate}</strong></p>
+            <p className="text-text-ghost">Approx. {hLeft}h {mLeft}m remaining</p>
+          </div>
+        </div>
+        <a href="/" className="inline-block btn-gradient font-bold px-6 py-3 rounded-xl text-xs shadow-md transition-all cursor-pointer">
+          Create New Paste
+        </a>
+      </div>
+    );
+  }
+
+  // 1.4. OTP Gate — sender required OTP verification
+  if (otpRequired && !otpVerified) {
+    const sendOtp = async () => {
+      setIsSendingOtp(true);
+      setOtpError('');
+      try {
+        const res = await fetch(`/api/pastes/${id}/otp`, { method: 'POST' });
+        const data = await res.json();
+        setOtpSent(true);
+        if (data.demo_otp) setDemoOtp(data.demo_otp);
+      } catch {
+        setOtpError('Failed to send OTP. Try again.');
+      } finally {
+        setIsSendingOtp(false);
+      }
+    };
+
+    const verifyOtp = async () => {
+      setOtpError('');
+      try {
+        const res = await fetch(`/api/pastes/${id}/otp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp: otpInput.trim() }),
+        });
+        const data = await res.json();
+        if (data.verified) {
+          setOtpVerified(true);
+          setOtpRequired(false);
+        } else {
+          setOtpError(data.error || 'Verification failed.');
+        }
+      } catch {
+        setOtpError('Network error. Try again.');
+      }
+    };
+
+    return (
+      <div className="max-w-md mx-auto py-12 px-6 glass-panel rounded-2xl border-cyan-500/20 bg-cyan-500/5 text-center space-y-6">
+        <div className="w-14 h-14 rounded-full bg-cyan-500/10 flex items-center justify-center mx-auto border border-cyan-500/20">
+          <ShieldCheck className="w-7 h-7 text-cyan-400" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-lg font-bold text-text-main">🔐 OTP Identity Gate</h3>
+          <p className="text-xs text-text-muted leading-relaxed">
+            The sender protected this paste with a One-Time Password. You must verify before accessing the content.
+          </p>
+        </div>
+        {!otpSent ? (
+          <button
+            id="otp-send-btn"
+            onClick={sendOtp}
+            disabled={isSendingOtp}
+            className="btn-gradient font-bold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full"
+          >
+            {isSendingOtp ? '⏳ Sending OTP...' : '📨 Send OTP (Simulated SMS)'}
+          </button>
+        ) : (
+          <div className="space-y-3">
+            {demoOtp && (
+              <div className="p-2.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs font-mono text-cyan-300">
+                🧪 Demo OTP: <strong className="text-white">{demoOtp}</strong>
+              </div>
+            )}
+            <input
+              id="otp-input"
+              type="text"
+              maxLength={6}
+              placeholder="Enter 6-digit OTP"
+              value={otpInput}
+              onChange={e => setOtpInput(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-input-bg border border-input-border rounded-xl px-4 py-3 text-sm font-mono text-center tracking-widest text-text-main placeholder:text-text-ghost focus:outline-none focus:border-cyan-500"
+            />
+            {otpError && <p className="text-rose-400 text-xs">{otpError}</p>}
+            <button
+              id="otp-verify-btn"
+              onClick={verifyOtp}
+              className="btn-gradient font-bold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full"
+            >
+              ✓ Verify OTP
+            </button>
+            <button onClick={sendOtp} className="text-xs text-text-ghost hover:text-cyan-400 underline">
+              Resend OTP
+            </button>
+          </div>
+        )}
       </div>
     );
   }

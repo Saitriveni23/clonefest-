@@ -50,6 +50,28 @@ async function hashSha256(text: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Scan text for sensitive patterns and return human-readable warnings */
+function scanForPii(text: string): string[] {
+  const warnings: string[] = [];
+  const checks: [RegExp, string][] = [
+    [/(?:password|passwd|pwd)\s*[:=]\s*\S+/i, '🔑 Possible plaintext password detected'],
+    [/(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*\S+/i, '🗝️ API key/secret detected'],
+    [/AKIA[0-9A-Z]{16}/i, '☁️ AWS Access Key ID detected'],
+    [/(?:-----BEGIN (?:RSA |EC )?PRIVATE KEY-----)/i, '🔐 Private key block detected'],
+    [/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i, '📧 Email address detected'],
+    [/\b(?:\d[ -]?){15,16}\b/, '💳 Potential credit card number detected'],
+    [/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/i, '🐙 GitHub Personal Access Token detected'],
+    [/sk-[a-zA-Z0-9]{40,}/i, '🤖 OpenAI API key pattern detected'],
+    [/(?:SSN|social.?security)\D{0,5}\d{3}[-.\s]\d{2}[-.\s]\d{4}/i, '🪪 SSN pattern detected'],
+    [/(?:xox[baprs]-)[0-9A-Za-z\-]+/i, '💬 Slack token detected'],
+  ];
+  for (const [pattern, message] of checks) {
+    if (pattern.test(text)) warnings.push(message);
+  }
+  return warnings;
+}
+
+
 export function PasteForm() {
   // Method tab: direct paste vs advanced extensions
   const [method, setMethod] = useState<'direct' | 'threshold' | 'chat' | 'stego' | 'slack'>('direct');
@@ -97,6 +119,16 @@ export function PasteForm() {
   // Rate-limiting and Geo-fencing options
   const [maxAttempts, setMaxAttempts] = useState('0');
   const [allowedCountries, setAllowedCountries] = useState('');
+
+  // OTP Gate toggle
+  const [otpRequired, setOtpRequired] = useState(false);
+
+  // Time-release scheduled date
+  const [releaseAfterDate, setReleaseAfterDate] = useState('');
+
+  // AI PII Scanner state
+  const [piiWarnings, setPiiWarnings] = useState<string[]>([]);
+  const [piiChecked, setPiiChecked] = useState(false);
 
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
@@ -425,7 +457,9 @@ export function PasteForm() {
             check_in_key_hash,
             duress_key_hash,
             max_attempts: maxAttempts ? Number(maxAttempts) : 0,
-            allowed_countries: allowedCountries || null
+            allowed_countries: allowedCountries || null,
+            otp_required: otpRequired,
+            release_after: releaseAfterDate ? new Date(releaseAfterDate).getTime() : null,
           }),
         });
 
@@ -1585,8 +1619,76 @@ export function PasteForm() {
                   className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-sky-500"
                 />
               </div>
+
+              {/* OTP Gate toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                  OTP Identity Gate
+                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Require 6-digit verification)</span>
+                </label>
+                <button
+                  id="toggle-otp-required"
+                  type="button"
+                  onClick={() => setOtpRequired(!otpRequired)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${otpRequired ? 'bg-cyan-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${otpRequired ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+
+              {/* Time-release date/time picker */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-violet-400" />
+                  Schedule Time-Release
+                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Leave blank for instant access)</span>
+                </label>
+                <input
+                  id="time-release-input"
+                  type="datetime-local"
+                  value={releaseAfterDate}
+                  onChange={e => setReleaseAfterDate(e.target.value)}
+                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-violet-500 text-text-main"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
             </div>
           )}
+
+          {/* ── AI PII Content Scanner ── */}
+          {method === 'direct' && text && (
+            <div className="mt-2 border-t border-panel-border pt-4 space-y-2">
+              <button
+                id="scan-pii-btn"
+                type="button"
+                onClick={() => {
+                  const warnings = scanForPii(text);
+                  setPiiWarnings(warnings);
+                  setPiiChecked(true);
+                }}
+                className="flex items-center gap-2 text-xs px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition-colors font-semibold"
+              >
+                <Bot className="w-4 h-4" />
+                🔍 Scan for PII / Sensitive Data
+              </button>
+              {piiChecked && (
+                <div className={`p-3 rounded-xl text-xs border ${piiWarnings.length === 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-rose-500/10 border-rose-500/20 text-rose-300'}`}>
+                  {piiWarnings.length === 0 ? (
+                    <p>✅ No sensitive patterns found. Safe to encrypt.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="font-bold text-rose-200">⚠️ Sensitive content detected:</p>
+                      {piiWarnings.map((w, i) => <p key={i}>{w}</p>)}
+                      <p className="text-text-ghost mt-2">Review carefully before sharing. Content will still be encrypted.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+
 
           {/* Expiration, Password, & Security Settings */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-panel-border">
