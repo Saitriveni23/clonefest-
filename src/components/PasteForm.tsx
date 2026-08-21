@@ -8,7 +8,7 @@ import {
   FileText, Code, Lock, Unlock, Calendar, 
   Trash2, Upload, X, Copy, Check, QrCode, ArrowRight, ShieldCheck, Loader2,
   Share2, Users2, MessageSquareCode, Image as ImageIcon, Bot, Download, Eye,
-  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw, Cpu
+  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw, Cpu, Globe, ShieldAlert
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
@@ -88,6 +88,16 @@ export function PasteForm() {
   const [isTimeLocked, setIsTimeLocked] = useState(false);
   const [duressKey, setDuressKey] = useState('');
 
+  // Sketchpad states and refs
+  const [isDrawingEnabled, setIsDrawingEnabled] = useState(false);
+  const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
+  const [isDrawing, setIsDrawingLine] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Rate-limiting and Geo-fencing options
+  const [maxAttempts, setMaxAttempts] = useState('0');
+  const [allowedCountries, setAllowedCountries] = useState('');
+
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -144,6 +154,57 @@ export function PasteForm() {
       setIsRecording(false);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     }
+  };
+
+  // Canvas Sketching helpers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineWidth = 3.0;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#a78bfa'; // violet line color
+    setIsDrawingLine(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawingLine = () => {
+    setIsDrawingLine(false);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      setSketchDataUrl(canvas.toDataURL());
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSketchDataUrl(null);
   };
 
   // Live Obfuscated encryption preview
@@ -285,6 +346,7 @@ export function PasteForm() {
             language: format === 'code' ? language : 'plaintext',
             file: file,
             is_time_locked: isTimeLocked,
+            sketch: sketchDataUrl || null,
           };
           const realEnc = await encryptData(JSON.stringify(realPayload), keyHex, password);
 
@@ -297,6 +359,7 @@ export function PasteForm() {
             language: 'plaintext',
             file: null,
             is_time_locked: isTimeLocked,
+            sketch: null,
           };
           const decoyEnc = await encryptData(JSON.stringify(decoyPayload), keyHex, decoyPassword);
 
@@ -321,6 +384,7 @@ export function PasteForm() {
             language: format === 'code' ? language : 'plaintext',
             file: file,
             is_time_locked: isTimeLocked,
+            sketch: sketchDataUrl || null,
           };
           const enc = await encryptData(
             JSON.stringify(payload),
@@ -360,6 +424,8 @@ export function PasteForm() {
             check_in_interval: isDeadMan ? Number(deadManInterval) : null,
             check_in_key_hash,
             duress_key_hash,
+            max_attempts: maxAttempts ? Number(maxAttempts) : 0,
+            allowed_countries: allowedCountries || null
           }),
         });
 
@@ -1242,24 +1308,73 @@ export function PasteForm() {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Attach Secure File (2MB Max)
-                    </button>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 text-violet-400" />
+                        Attach Secure File (2MB Max)
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={startRecording}
-                      className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-                    >
-                      <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
-                      Record Secure Voice Note Memo
-                    </button>
+                      <button
+                        type="button"
+                        onClick={startRecording}
+                        className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                      >
+                        <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
+                        Record Voice Memo
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsDrawingEnabled(!isDrawingEnabled)}
+                        className={`flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed transition-all cursor-pointer text-xs font-semibold ${
+                          isDrawingEnabled 
+                            ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-bold' 
+                            : 'border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-text-muted hover:text-text-main'
+                        }`}
+                      >
+                        <Cpu className="w-4 h-4 text-sky-400" />
+                        Draw Secure Sketch
+                      </button>
+                    </div>
+
+                    {isDrawingEnabled && (
+                      <div className="p-4 rounded-xl border border-panel-border bg-btn-sec-bg/25 space-y-3 animate-slide-in text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-text-main flex items-center gap-1.5">
+                            <Cpu className="w-4 h-4 text-sky-400 animate-pulse" />
+                            Secure Sketching Canvas Board
+                          </span>
+                          <button
+                            type="button"
+                            onClick={clearCanvas}
+                            className="px-2.5 py-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg cursor-pointer transition-all"
+                          >
+                            Clear Board
+                          </button>
+                        </div>
+                        
+                        <div className="border border-input-border rounded-xl overflow-hidden bg-bg-main">
+                          <canvas
+                            ref={canvasRef}
+                            width={500}
+                            height={250}
+                            onMouseDown={startDrawing}
+                            onMouseMove={draw}
+                            onMouseUp={stopDrawingLine}
+                            onMouseLeave={stopDrawingLine}
+                            className="w-full h-64 bg-bg-main cursor-crosshair block"
+                          />
+                        </div>
+                        <p className="text-[9px] text-text-ghost">
+                          Draw diagrams, signatures, or visual notes on the board. The sketch is fully encrypted client-side alongside your text secrets.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
                 <input
@@ -1435,6 +1550,40 @@ export function PasteForm() {
                     className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-rose-500"
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Advanced Guess limits and Geofencing parameters */}
+          {method === 'direct' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-panel-border text-left">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  Guess Attempt Limit (Auto-Destruct)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Attempts allowed (e.g. 3, or 0 for unlimited)..."
+                  value={maxAttempts}
+                  onChange={(e) => setMaxAttempts(e.target.value)}
+                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-rose-500"
+                  min="0"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-sky-400" />
+                  Geo-Fence: Restricted Countries
+                </label>
+                <input
+                  type="text"
+                  placeholder="Comma separated codes (e.g. US, IN, GB)..."
+                  value={allowedCountries}
+                  onChange={(e) => setAllowedCountries(e.target.value)}
+                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-sky-500"
+                />
               </div>
             </div>
           )}

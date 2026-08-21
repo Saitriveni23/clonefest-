@@ -26,6 +26,7 @@ interface DecryptedPayload {
     size: number;
     data: string; // Base64 encoding
   } | null;
+  sketch?: string | null;
 }
 
 export function PasteView({ id }: PasteViewProps) {
@@ -74,6 +75,10 @@ export function PasteView({ id }: PasteViewProps) {
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
   
+  // Rate-limiting attempt counters
+  const [maxAttempts, setMaxAttempts] = useState(0);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
@@ -111,6 +116,8 @@ export function PasteView({ id }: PasteViewProps) {
         setCreatedAt(data.created_at);
         setExpiresAt(data.expires_at);
         setViewCount(data.view_count);
+        setMaxAttempts(data.max_attempts || 0);
+        setFailedAttempts(data.failed_attempts || 0);
 
         // Pre-check decoy vault wrappers to force password prompt
         let isDecoy = false;
@@ -313,6 +320,29 @@ export function PasteView({ id }: PasteViewProps) {
     } catch (err: any) {
       console.error(err);
       setDecryptionError(true);
+      
+      if (isPasswordProtected) {
+        try {
+          const failRes = await fetch(`/api/pastes/${id}/fail`, { method: 'POST' });
+          if (failRes.ok) {
+            const failData = await failRes.json();
+            setFailedAttempts(failData.failed);
+            if (failData.burned) {
+              setErrorMsg('🚨 AUTO-DESTRUCT TRIGGERED: Password guess limit exceeded. This paste has been wiped from the database.');
+              setToast({ message: 'Auto-destruct triggered: guess limit reached.', type: 'error' });
+              setPayload(null);
+              setIsLoading(false);
+              return;
+            } else if (maxAttempts > 0) {
+              setToast({ message: `Incorrect password. Attempts made: ${failData.failed}/${maxAttempts}`, type: 'error' });
+              return;
+            }
+          }
+        } catch (failErr) {
+          console.error('Failed to report attempt decrement:', failErr);
+        }
+      }
+
       setToast({ message: err.message || 'Decryption failed. Check key or password.', type: 'error' });
     } finally {
       setIsDecrypting(false);
@@ -902,6 +932,23 @@ export function PasteView({ id }: PasteViewProps) {
                 Download Decrypted File
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Decrypted Sketchboard Canvas Draw visual */}
+      {payload?.sketch && (
+        <div className="glass-panel rounded-2xl p-5 border-violet-500/20 bg-violet-500/5 animate-slide-in text-left space-y-3">
+          <span className="text-xs font-bold text-violet-400 flex items-center gap-1.5 uppercase tracking-wider">
+            <Cpu className="w-4 h-4 text-violet-400 animate-pulse" />
+            Decrypted Secure Drawing
+          </span>
+          <div className="border border-panel-border rounded-xl overflow-hidden bg-bg-main p-2 flex items-center justify-center">
+            <img 
+              src={payload.sketch} 
+              alt="Decrypted Secure Diagram Sketch" 
+              className="max-w-full max-h-96 object-contain block rounded-lg"
+            />
           </div>
         </div>
       )}

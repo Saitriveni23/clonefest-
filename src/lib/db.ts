@@ -28,7 +28,10 @@ function getDb(): Database.Database {
         check_in_due INTEGER,
         check_in_interval INTEGER,
         check_in_key_hash TEXT,
-        duress_key_hash TEXT
+        duress_key_hash TEXT,
+        max_attempts INTEGER DEFAULT 0,
+        failed_attempts INTEGER DEFAULT 0,
+        allowed_countries TEXT
       );
       
       CREATE TABLE IF NOT EXISTS threads (
@@ -64,6 +67,15 @@ function getDb(): Database.Database {
     try {
       dbInstance.exec("ALTER TABLE pastes ADD COLUMN duress_key_hash TEXT");
     } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN max_attempts INTEGER DEFAULT 0");
+    } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN failed_attempts INTEGER DEFAULT 0");
+    } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN allowed_countries TEXT");
+    } catch(e){}
   }
   return dbInstance;
 }
@@ -84,6 +96,9 @@ export interface PasteRow {
   check_in_interval: number | null;
   check_in_key_hash: string | null;
   duress_key_hash: string | null;
+  max_attempts: number;
+  failed_attempts: number;
+  allowed_countries: string | null;
 }
 
 export interface ThreadRow {
@@ -109,12 +124,13 @@ export const dbHelper = {
     check_in_interval?: number | null;
     check_in_key_hash?: string | null;
     duress_key_hash?: string | null;
+    max_attempts?: number;
+    allowed_countries?: string | null;
   }): void {
     const db = getDb();
     const createdAt = Date.now();
     const expiresAt = paste.expires_in_seconds ? createdAt + (paste.expires_in_seconds * 1000) : null;
     
-    // For dead man switch, initial check_in_due is now + interval
     const checkInDue = paste.is_dead_man && paste.check_in_interval 
       ? createdAt + (paste.check_in_interval * 1000) 
       : null;
@@ -124,9 +140,9 @@ export const dbHelper = {
         id, ciphertext, iv, created_at, expires_at, burn_after_read, 
         password_protected, view_count, manage_key_hash, read_at,
         is_dead_man, check_in_due, check_in_interval, check_in_key_hash,
-        duress_key_hash
+        duress_key_hash, max_attempts, failed_attempts, allowed_countries
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?)
     `);
     
     stmt.run(
@@ -142,7 +158,9 @@ export const dbHelper = {
       checkInDue,
       paste.check_in_interval || null,
       paste.check_in_key_hash || null,
-      paste.duress_key_hash || null
+      paste.duress_key_hash || null,
+      paste.max_attempts || 0,
+      paste.allowed_countries || null
     );
   },
 
@@ -161,9 +179,8 @@ export const dbHelper = {
     
     const now = Date.now();
     
-    // If it's a dead man's switch, do not increment view count or record read_at until countdown expires
     if (row.is_dead_man === 1 && row.check_in_due && now < row.check_in_due) {
-      return row; // Keep it locked, we'll return it but the API route will block sending ciphertext
+      return row; 
     }
     
     // Update view count and read_at timestamp
@@ -187,11 +204,32 @@ export const dbHelper = {
     const stmt = db.prepare(`
       SELECT id, created_at, expires_at, burn_after_read, password_protected, 
              view_count, manage_key_hash, read_at, is_dead_man, check_in_due, 
-             check_in_interval, check_in_key_hash, duress_key_hash 
+             check_in_interval, check_in_key_hash, duress_key_hash, max_attempts,
+             failed_attempts, allowed_countries
       FROM pastes WHERE id = ?
     `);
     const row = stmt.get(id) as Omit<PasteRow, 'ciphertext' | 'iv'> | undefined;
     return row || null;
+  },
+
+  /**
+   * Increments the failed attempts counter.
+   * If it exceeds max_attempts, deletes the paste.
+   */
+  incrementFailedAttempts(id: string): { failed: number; burned: boolean } {
+    const db = getDb();
+    const stmt = db.prepare('SELECT max_attempts, failed_attempts FROM pastes WHERE id = ?');
+    const row = stmt.get(id) as { max_attempts: number; failed_attempts: number } | undefined;
+    if (!row) return { failed: 0, burned: true };
+
+    const newFailed = row.failed_attempts + 1;
+    if (row.max_attempts > 0 && newFailed >= row.max_attempts) {
+      this.deletePaste(id);
+      return { failed: newFailed, burned: true };
+    }
+
+    db.prepare('UPDATE pastes SET failed_attempts = ? WHERE id = ?').run(newFailed, id);
+    return { failed: newFailed, burned: false };
   },
 
   /**

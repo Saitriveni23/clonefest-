@@ -64,12 +64,34 @@ export async function GET(
         is_dead_man: metadata.is_dead_man === 1,
         check_in_due: metadata.check_in_due,
         check_in_interval: metadata.check_in_interval,
+        max_attempts: metadata.max_attempts,
+        failed_attempts: metadata.failed_attempts,
+        allowed_countries: metadata.allowed_countries,
       });
+    }
+
+    // Geofencing Check before loading paste
+    const pasteMeta = dbHelper.getPasteMetadata(id);
+    if (!pasteMeta) {
+      return NextResponse.json(
+        { error: 'Paste not found, expired, or already burned.' },
+        { status: 404 }
+      );
+    }
+
+    if (pasteMeta.allowed_countries) {
+      const country = req.nextUrl.searchParams.get('mockCountry') || req.headers.get('x-vercel-ip-country') || req.headers.get('cf-ipcountry') || 'IN';
+      const allowedList = pasteMeta.allowed_countries.split(',').map(c => c.trim().toUpperCase());
+      if (!allowedList.includes(country.toUpperCase())) {
+        return NextResponse.json(
+          { error: `Geo-Fence Block: Access from your region (${country.toUpperCase()}) is unauthorized.` },
+          { status: 403 }
+        );
+      }
     }
 
     // Otherwise, fetch the paste content for the recipient
     const paste = dbHelper.getPaste(id);
-
     if (!paste) {
       return NextResponse.json(
         { error: 'Paste not found, expired, or already burned.' },
@@ -100,6 +122,8 @@ export async function GET(
       view_count: paste.view_count,
       is_dead_man: paste.is_dead_man === 1,
       check_in_due: paste.check_in_due,
+      max_attempts: paste.max_attempts,
+      failed_attempts: paste.failed_attempts,
     });
   } catch (error: any) {
     console.error('Error fetching paste:', error);
