@@ -33,7 +33,10 @@ function getDb(): Database.Database {
         failed_attempts INTEGER DEFAULT 0,
         allowed_countries TEXT,
         release_after INTEGER,
-        otp_required INTEGER DEFAULT 0
+        otp_required INTEGER DEFAULT 0,
+        scan_limit INTEGER DEFAULT 0,
+        scan_count INTEGER DEFAULT 0,
+        biometric_required INTEGER DEFAULT 0
       );
       
       CREATE TABLE IF NOT EXISTS threads (
@@ -84,6 +87,15 @@ function getDb(): Database.Database {
     try {
       dbInstance.exec("ALTER TABLE pastes ADD COLUMN otp_required INTEGER DEFAULT 0");
     } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN scan_limit INTEGER DEFAULT 0");
+    } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN scan_count INTEGER DEFAULT 0");
+    } catch(e){}
+    try {
+      dbInstance.exec("ALTER TABLE pastes ADD COLUMN biometric_required INTEGER DEFAULT 0");
+    } catch(e){}
   }
   return dbInstance;
 }
@@ -109,6 +121,9 @@ export interface PasteRow {
   allowed_countries: string | null;
   release_after: number | null;
   otp_required: number;
+  scan_limit: number;
+  scan_count: number;
+  biometric_required: number;
 }
 
 export interface ThreadRow {
@@ -138,6 +153,8 @@ export const dbHelper = {
     allowed_countries?: string | null;
     release_after?: number | null;
     otp_required?: boolean;
+    scan_limit?: number;
+    biometric_required?: boolean;
   }): void {
     const db = getDb();
     const createdAt = Date.now();
@@ -153,9 +170,9 @@ export const dbHelper = {
         password_protected, view_count, manage_key_hash, read_at,
         is_dead_man, check_in_due, check_in_interval, check_in_key_hash,
         duress_key_hash, max_attempts, failed_attempts, allowed_countries,
-        release_after, otp_required
+        release_after, otp_required, scan_limit, scan_count, biometric_required
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, ?)
     `);
     
     stmt.run(
@@ -175,7 +192,9 @@ export const dbHelper = {
       paste.max_attempts || 0,
       paste.allowed_countries || null,
       paste.release_after || null,
-      paste.otp_required ? 1 : 0
+      paste.otp_required ? 1 : 0,
+      paste.scan_limit || 0,
+      paste.biometric_required ? 1 : 0
     );
   },
 
@@ -312,5 +331,25 @@ export const dbHelper = {
     const stmt = db.prepare('UPDATE threads SET messages_json = ? WHERE id = ?');
     const result = stmt.run(messagesJson, id);
     return result.changes > 0;
-  }
+  },
+
+  /**
+   * Increments scan_count and returns the updated row.
+   * If scan_limit > 0 and scan_count >= scan_limit, deletes the paste (burn).
+   * Returns { burned: true } if the paste was burned.
+   */
+  incrementScanCount(id: string): { burned: boolean; scan_count: number; scan_limit: number } {
+    const db = getDb();
+    const row = db.prepare('SELECT scan_limit, scan_count FROM pastes WHERE id = ?').get(id) as { scan_limit: number; scan_count: number } | undefined;
+    if (!row) return { burned: false, scan_count: 0, scan_limit: 0 };
+
+    const newCount = row.scan_count + 1;
+    db.prepare('UPDATE pastes SET scan_count = ? WHERE id = ?').run(newCount, id);
+
+    if (row.scan_limit > 0 && newCount >= row.scan_limit) {
+      db.prepare('DELETE FROM pastes WHERE id = ?').run(id);
+      return { burned: true, scan_count: newCount, scan_limit: row.scan_limit };
+    }
+    return { burned: false, scan_count: newCount, scan_limit: row.scan_limit };
+  },
 };

@@ -138,6 +138,9 @@ export async function GET(
       failed_attempts: paste.failed_attempts,
       otp_required: paste.otp_required === 1,
       release_after: paste.release_after,
+      scan_limit: paste.scan_limit,
+      scan_count: paste.scan_count,
+      biometric_required: paste.biometric_required === 1,
     });
   } catch (error: any) {
     console.error('Error fetching paste:', error);

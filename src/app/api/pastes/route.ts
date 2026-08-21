@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
     const { 
       ciphertext, iv, expires_in_seconds, burn_after_read, password_protected, 
       manage_key_hash, is_dead_man, check_in_interval, check_in_key_hash,
-      duress_key_hash, max_attempts, allowed_countries, release_after, otp_required
+      duress_key_hash, max_attempts, allowed_countries, release_after, otp_required,
+      scan_limit, biometric_required
     } = body;
 
     // Validation
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
       allowed_countries: allowed_countries || null,
       release_after: release_after ? Number(release_after) : null,
       otp_required: Boolean(otp_required),
+      scan_limit: scan_limit ? Number(scan_limit) : 0,
+      biometric_required: Boolean(biometric_required),
     });
 
     return NextResponse.json({ id });

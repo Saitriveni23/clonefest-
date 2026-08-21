@@ -130,6 +130,10 @@ export function PasteForm() {
   const [piiWarnings, setPiiWarnings] = useState<string[]>([]);
   const [piiChecked, setPiiChecked] = useState(false);
 
+  // QR Scan limit and Biometric gate form state
+  const [scanLimitInput, setScanLimitInput] = useState('0');
+  const [biometricRequired, setBiometricRequired] = useState(false);
+
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -460,6 +464,8 @@ export function PasteForm() {
             allowed_countries: allowedCountries || null,
             otp_required: otpRequired,
             release_after: releaseAfterDate ? new Date(releaseAfterDate).getTime() : null,
+            scan_limit: scanLimitInput ? Number(scanLimitInput) : 0,
+            biometric_required: biometricRequired,
           }),
         });
 
@@ -1653,6 +1659,41 @@ export function PasteForm() {
                   min={new Date().toISOString().slice(0, 16)}
                 />
               </div>
+
+              {/* QR Scan Limit */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <QrCode className="w-4 h-4 text-orange-400" />
+                  Self-Destructing QR — Scan Limit
+                  <span className="text-[10px] text-text-ghost font-normal ml-1">(0 = unlimited)</span>
+                </label>
+                <input
+                  id="scan-limit-input"
+                  type="number"
+                  min="0"
+                  placeholder="Max QR scans before burn (e.g. 3)..."
+                  value={scanLimitInput}
+                  onChange={e => setScanLimitInput(e.target.value)}
+                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-orange-500"
+                />
+              </div>
+
+              {/* Biometric Gate toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                  <span className="text-base">🫆</span>
+                  Biometric Gate
+                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Face ID / Touch ID / Windows Hello)</span>
+                </label>
+                <button
+                  id="toggle-biometric-required"
+                  type="button"
+                  onClick={() => setBiometricRequired(!biometricRequired)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${biometricRequired ? 'bg-emerald-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${biometricRequired ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
             </div>
           )}
 
@@ -1729,6 +1770,34 @@ export function PasteForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full glass-input rounded-xl px-4 py-3 text-sm"
                 />
+                {/* Password Strength Meter */}
+                {password && (() => {
+                  const len = password.length;
+                  const hasUpper = /[A-Z]/.test(password);
+                  const hasLower = /[a-z]/.test(password);
+                  const hasNum = /[0-9]/.test(password);
+                  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+                  const charsetSize = (hasUpper ? 26 : 0) + (hasLower ? 26 : 0) + (hasNum ? 10 : 0) + (hasSymbol ? 32 : 0);
+                  const entropy = charsetSize > 0 ? Math.floor(len * Math.log2(charsetSize)) : 0;
+                  const level = entropy < 28 ? 0 : entropy < 50 ? 1 : entropy < 70 ? 2 : entropy < 100 ? 3 : 4;
+                  const labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+                  const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-400', 'bg-emerald-400', 'bg-emerald-500'];
+                  const textColors = ['text-red-400', 'text-orange-400', 'text-yellow-400', 'text-emerald-400', 'text-emerald-300'];
+                  const crackTimes = ['< 1 second', '< 1 minute', '< 1 hour', '< 1 year', 'Centuries'];
+                  return (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex gap-1">
+                        {[0,1,2,3,4].map(i => (
+                          <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= level ? colors[level] : 'bg-panel-border'}`} />
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span className={`font-bold ${textColors[level]}`}>{labels[level]}</span>
+                        <span className="text-text-ghost">{entropy} bits · crack: {crackTimes[level]}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
