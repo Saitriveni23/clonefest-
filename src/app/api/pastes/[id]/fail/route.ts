@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const { failed, burned } = dbHelper.incrementFailedAttempts(id);
+    const { failed, burned } = await dbHelper.incrementFailedAttempts(id);
 
     return NextResponse.json({
       failed,

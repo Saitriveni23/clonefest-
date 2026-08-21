@@ -19,7 +19,7 @@ function encryptServerSide(plaintext: string, keyHex: string): { ciphertext: str
   };
 }
 
-function generateUniqueId(length = 8): string {
+async function generateUniqueId(length = 8): Promise<string> {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -28,7 +28,7 @@ function generateUniqueId(length = 8): string {
     for (let i = 0; i < length; i++) {
       result += chars[bytes[i] % chars.length];
     }
-    const existing = dbHelper.getPaste(result);
+    const existing = await dbHelper.getPaste(result);
     if (!existing) {
       return result;
     }
@@ -79,10 +79,10 @@ export async function POST(req: NextRequest) {
 
     // Encrypt payload using server-side AES-256-GCM
     const { ciphertext, iv } = encryptServerSide(JSON.stringify(payload), keyHex);
-    const pasteId = generateUniqueId();
+    const pasteId = await generateUniqueId();
 
     // Save encrypted paste to SQLite
-    dbHelper.createPaste({
+    await dbHelper.createPaste({
       id: pasteId,
       ciphertext,
       iv,

@@ -18,7 +18,7 @@ export async function GET(
 
     // If manageKey is provided, return metadata safely (for the sender panel)
     if (manageKey) {
-      const metadata = dbHelper.getPasteMetadata(id);
+      const metadata = await dbHelper.getPasteMetadata(id);
       if (!metadata) {
         return NextResponse.json(
           { error: 'Paste not found or has expired.' },
@@ -30,7 +30,7 @@ export async function GET(
 
       if (metadata.duress_key_hash === hash) {
         // Trigger silent coercion self-destruct!
-        dbHelper.deletePaste(id);
+        await dbHelper.deletePaste(id);
         return NextResponse.json({
           id: metadata.id,
           created_at: metadata.created_at,
@@ -71,7 +71,7 @@ export async function GET(
     }
 
     // Geofencing Check before loading paste
-    const pasteMeta = dbHelper.getPasteMetadata(id);
+    const pasteMeta = await dbHelper.getPasteMetadata(id);
     if (!pasteMeta) {
       return NextResponse.json(
         { error: 'Paste not found, expired, or already burned.' },
@@ -91,7 +91,7 @@ export async function GET(
     }
 
     // Otherwise, fetch the paste content for the recipient
-    const paste = dbHelper.getPaste(id);
+    const paste = await dbHelper.getPaste(id);
     if (!paste) {
       return NextResponse.json(
         { error: 'Paste not found, expired, or already burned.' },
@@ -160,7 +160,7 @@ export async function DELETE(
     const searchParams = req.nextUrl.searchParams;
     const manageKey = searchParams.get('manageKey');
 
-    const metadata = dbHelper.getPasteMetadata(id);
+    const metadata = await dbHelper.getPasteMetadata(id);
     if (!metadata) {
       return NextResponse.json(
         { error: 'Paste not found.' },
@@ -185,7 +185,7 @@ export async function DELETE(
       }
     }
 
-    const deleted = dbHelper.deletePaste(id);
+    const deleted = await dbHelper.deletePaste(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Paste not found or could not be deleted.' },

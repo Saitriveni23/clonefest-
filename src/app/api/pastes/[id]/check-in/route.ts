@@ -22,7 +22,7 @@ export async function POST(
       );
     }
 
-    const metadata = dbHelper.getPasteMetadata(id);
+    const metadata = await dbHelper.getPasteMetadata(id);
     if (!metadata || metadata.is_dead_man !== 1) {
       return NextResponse.json(
         { error: 'Dead man switch not found or paste does not exist.' },
@@ -45,7 +45,7 @@ export async function POST(
       );
     }
 
-    const nextCheckInDue = dbHelper.checkInDeadMan(id, metadata.check_in_interval);
+    const nextCheckInDue = await dbHelper.checkInDeadMan(id, metadata.check_in_interval);
 
     return NextResponse.json({
       success: true,

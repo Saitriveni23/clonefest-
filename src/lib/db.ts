@@ -1,103 +1,15 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Redis } from '@upstash/redis';
 
-let dbInstance: Database.Database | null = null;
-
-function getDb(): Database.Database {
-  if (!dbInstance) {
-    const dbPath = path.resolve(process.cwd(), 'cipherdrop.db');
-    dbInstance = new Database(dbPath);
-    
-    // Enable Write-Ahead Logging (WAL) for better concurrent performance
-    dbInstance.pragma('journal_mode = WAL');
-    
-    // Create/update schemas
-    dbInstance.exec(`
-      CREATE TABLE IF NOT EXISTS pastes (
-        id TEXT PRIMARY KEY,
-        ciphertext TEXT NOT NULL,
-        iv TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        expires_at INTEGER,
-        burn_after_read INTEGER DEFAULT 0,
-        password_protected INTEGER DEFAULT 0,
-        view_count INTEGER DEFAULT 0,
-        manage_key_hash TEXT,
-        read_at INTEGER,
-        is_dead_man INTEGER DEFAULT 0,
-        check_in_due INTEGER,
-        check_in_interval INTEGER,
-        check_in_key_hash TEXT,
-        duress_key_hash TEXT,
-        max_attempts INTEGER DEFAULT 0,
-        failed_attempts INTEGER DEFAULT 0,
-        allowed_countries TEXT,
-        release_after INTEGER,
-        otp_required INTEGER DEFAULT 0,
-        scan_limit INTEGER DEFAULT 0,
-        scan_count INTEGER DEFAULT 0,
-        biometric_required INTEGER DEFAULT 0
-      );
-      
-      CREATE TABLE IF NOT EXISTS threads (
-        id TEXT PRIMARY KEY,
-        messages_json TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        expires_at INTEGER NOT NULL
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_pastes_expires_at ON pastes(expires_at);
-      CREATE INDEX IF NOT EXISTS idx_threads_expires_at ON threads(expires_at);
-    `);
-
-    // Run safe migrations for existing sqlite databases
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN manage_key_hash TEXT");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN read_at INTEGER");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN is_dead_man INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN check_in_due INTEGER");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN check_in_interval INTEGER");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN check_in_key_hash TEXT");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN duress_key_hash TEXT");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN max_attempts INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN failed_attempts INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN allowed_countries TEXT");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN release_after INTEGER");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN otp_required INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN scan_limit INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN scan_count INTEGER DEFAULT 0");
-    } catch(e){}
-    try {
-      dbInstance.exec("ALTER TABLE pastes ADD COLUMN biometric_required INTEGER DEFAULT 0");
-    } catch(e){}
+// Initialize Redis client from env variables
+let redis: Redis | null = null;
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    redis = Redis.fromEnv();
+  } else {
+    console.warn("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set. Redis is not initialized.");
   }
-  return dbInstance;
+} catch (e) {
+  console.error("Failed to initialize Upstash Redis:", e);
 }
 
 export interface PasteRow {
@@ -133,11 +45,65 @@ export interface ThreadRow {
   expires_at: number;
 }
 
+// Helper to sanitize database object for Redis hash storage (filtering out null/undefined)
+function sanitizeForRedis(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== null && val !== undefined) {
+      if (typeof val === 'boolean') {
+        result[key] = val ? 1 : 0;
+      } else {
+        result[key] = val;
+      }
+    }
+  }
+  return result;
+}
+
+function parsePasteRow(data: Record<string, any> | null): PasteRow | null {
+  if (!data || !data.id) return null;
+  return {
+    id: String(data.id),
+    ciphertext: String(data.ciphertext || ''),
+    iv: String(data.iv || ''),
+    created_at: Number(data.created_at || 0),
+    expires_at: data.expires_at ? Number(data.expires_at) : null,
+    burn_after_read: Number(data.burn_after_read || 0),
+    password_protected: Number(data.password_protected || 0),
+    view_count: Number(data.view_count || 0),
+    manage_key_hash: data.manage_key_hash || null,
+    read_at: data.read_at ? Number(data.read_at) : null,
+    is_dead_man: Number(data.is_dead_man || 0),
+    check_in_due: data.check_in_due ? Number(data.check_in_due) : null,
+    check_in_interval: data.check_in_interval ? Number(data.check_in_interval) : null,
+    check_in_key_hash: data.check_in_key_hash || null,
+    duress_key_hash: data.duress_key_hash || null,
+    max_attempts: Number(data.max_attempts || 0),
+    failed_attempts: Number(data.failed_attempts || 0),
+    allowed_countries: data.allowed_countries || null,
+    release_after: data.release_after ? Number(data.release_after) : null,
+    otp_required: Number(data.otp_required || 0),
+    scan_limit: Number(data.scan_limit || 0),
+    scan_count: Number(data.scan_count || 0),
+    biometric_required: Number(data.biometric_required || 0),
+  };
+}
+
+function parseThreadRow(data: Record<string, any> | null): ThreadRow | null {
+  if (!data || !data.id) return null;
+  return {
+    id: String(data.id),
+    messages_json: String(data.messages_json || '[]'),
+    created_at: Number(data.created_at || 0),
+    expires_at: Number(data.expires_at || 0),
+  };
+}
+
 export const dbHelper = {
   /**
    * Save a new encrypted paste.
    */
-  createPaste(paste: {
+  async createPaste(paste: {
     id: string;
     ciphertext: string;
     iv: string;
@@ -155,199 +121,211 @@ export const dbHelper = {
     otp_required?: boolean;
     scan_limit?: number;
     biometric_required?: boolean;
-  }): void {
-    const db = getDb();
+  }): Promise<void> {
+    if (!redis) return;
+
     const createdAt = Date.now();
     const expiresAt = paste.expires_in_seconds ? createdAt + (paste.expires_in_seconds * 1000) : null;
-    
     const checkInDue = paste.is_dead_man && paste.check_in_interval 
       ? createdAt + (paste.check_in_interval * 1000) 
       : null;
 
-    const stmt = db.prepare(`
-      INSERT INTO pastes (
-        id, ciphertext, iv, created_at, expires_at, burn_after_read, 
-        password_protected, view_count, manage_key_hash, read_at,
-        is_dead_man, check_in_due, check_in_interval, check_in_key_hash,
-        duress_key_hash, max_attempts, failed_attempts, allowed_countries,
-        release_after, otp_required, scan_limit, scan_count, biometric_required
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, ?)
-    `);
-    
-    stmt.run(
-      paste.id,
-      paste.ciphertext,
-      paste.iv,
-      createdAt,
-      expiresAt,
-      paste.burn_after_read ? 1 : 0,
-      paste.password_protected ? 1 : 0,
-      paste.manage_key_hash || null,
-      paste.is_dead_man ? 1 : 0,
-      checkInDue,
-      paste.check_in_interval || null,
-      paste.check_in_key_hash || null,
-      paste.duress_key_hash || null,
-      paste.max_attempts || 0,
-      paste.allowed_countries || null,
-      paste.release_after || null,
-      paste.otp_required ? 1 : 0,
-      paste.scan_limit || 0,
-      paste.biometric_required ? 1 : 0
-    );
+    const rawData = {
+      id: paste.id,
+      ciphertext: paste.ciphertext,
+      iv: paste.iv,
+      created_at: createdAt,
+      expires_at: expiresAt,
+      burn_after_read: paste.burn_after_read ? 1 : 0,
+      password_protected: paste.password_protected ? 1 : 0,
+      view_count: 0,
+      manage_key_hash: paste.manage_key_hash || null,
+      read_at: null,
+      is_dead_man: paste.is_dead_man ? 1 : 0,
+      check_in_due: checkInDue,
+      check_in_interval: paste.check_in_interval || null,
+      check_in_key_hash: paste.check_in_key_hash || null,
+      duress_key_hash: paste.duress_key_hash || null,
+      max_attempts: paste.max_attempts || 0,
+      failed_attempts: 0,
+      allowed_countries: paste.allowed_countries || null,
+      release_after: paste.release_after || null,
+      otp_required: paste.otp_required ? 1 : 0,
+      scan_limit: paste.scan_limit || 0,
+      scan_count: 0,
+      biometric_required: paste.biometric_required ? 1 : 0,
+    };
+
+    const redisKey = `paste:${paste.id}`;
+    await redis.hset(redisKey, sanitizeForRedis(rawData));
+
+    // If there is an expiration, set TTL in Redis automatically
+    if (paste.expires_in_seconds) {
+      await redis.expire(redisKey, paste.expires_in_seconds);
+    }
   },
 
   /**
    * Retrieve a paste by ID.
-   * Cleans up expired pastes first, and deletes burn-after-read pastes on retrieval.
    */
-  getPaste(id: string): PasteRow | null {
-    const db = getDb();
-    this.cleanupExpired();
-    
-    const stmt = db.prepare('SELECT * FROM pastes WHERE id = ?');
-    const row = stmt.get(id) as PasteRow | undefined;
-    
+  async getPaste(id: string): Promise<PasteRow | null> {
+    if (!redis) return null;
+
+    const redisKey = `paste:${id}`;
+    const rawData = await redis.hgetall(redisKey);
+    const row = parsePasteRow(rawData);
+
     if (!row) return null;
-    
+
     const now = Date.now();
-    
+
+    // Check dead man switch countdown active
     if (row.is_dead_man === 1 && row.check_in_due && now < row.check_in_due) {
-      return row; 
+      return row;
     }
-    
+
     // Update view count and read_at timestamp
-    const updateStmt = db.prepare('UPDATE pastes SET view_count = view_count + 1, read_at = ? WHERE id = ?');
-    updateStmt.run(row.read_at ? row.read_at : now, id);
-    
+    const newReadAt = row.read_at ? row.read_at : now;
+    const newViewCount = row.view_count + 1;
+    await redis.hset(redisKey, {
+      view_count: newViewCount,
+      read_at: newReadAt,
+    });
+
     // If it's a burn-after-read paste, delete it immediately
     if (row.burn_after_read === 1) {
-      const deleteStmt = db.prepare('DELETE FROM pastes WHERE id = ?');
-      deleteStmt.run(id);
+      await redis.del(redisKey);
     }
-    
-    return row;
+
+    return {
+      ...row,
+      view_count: newViewCount,
+      read_at: newReadAt,
+    };
   },
 
   /**
-   * Fetch paste metadata safely for the sender (doesn't trigger burn-after-read destruction or update read_at)
+   * Fetch paste metadata safely for the sender
    */
-  getPasteMetadata(id: string): Omit<PasteRow, 'ciphertext' | 'iv'> | null {
-    const db = getDb();
-    const stmt = db.prepare(`
-      SELECT id, created_at, expires_at, burn_after_read, password_protected, 
-             view_count, manage_key_hash, read_at, is_dead_man, check_in_due, 
-             check_in_interval, check_in_key_hash, duress_key_hash, max_attempts,
-             failed_attempts, allowed_countries
-      FROM pastes WHERE id = ?
-    `);
-    const row = stmt.get(id) as Omit<PasteRow, 'ciphertext' | 'iv'> | undefined;
-    return row || null;
+  async getPasteMetadata(id: string): Promise<Omit<PasteRow, 'ciphertext' | 'iv'> | null> {
+    if (!redis) return null;
+
+    const redisKey = `paste:${id}`;
+    const rawData = await redis.hgetall(redisKey);
+    const row = parsePasteRow(rawData);
+    if (!row) return null;
+
+    const { ciphertext, iv, ...metadata } = row;
+    return metadata;
   },
 
   /**
    * Increments the failed attempts counter.
-   * If it exceeds max_attempts, deletes the paste.
    */
-  incrementFailedAttempts(id: string): { failed: number; burned: boolean } {
-    const db = getDb();
-    const stmt = db.prepare('SELECT max_attempts, failed_attempts FROM pastes WHERE id = ?');
-    const row = stmt.get(id) as { max_attempts: number; failed_attempts: number } | undefined;
+  async incrementFailedAttempts(id: string): Promise<{ failed: number; burned: boolean }> {
+    if (!redis) return { failed: 0, burned: false };
+
+    const redisKey = `paste:${id}`;
+    const rawData = await redis.hgetall(redisKey);
+    const row = parsePasteRow(rawData);
     if (!row) return { failed: 0, burned: true };
 
     const newFailed = row.failed_attempts + 1;
     if (row.max_attempts > 0 && newFailed >= row.max_attempts) {
-      this.deletePaste(id);
+      await this.deletePaste(id);
       return { failed: newFailed, burned: true };
     }
 
-    db.prepare('UPDATE pastes SET failed_attempts = ? WHERE id = ?').run(newFailed, id);
+    await redis.hset(redisKey, { failed_attempts: newFailed });
     return { failed: newFailed, burned: false };
   },
 
   /**
    * Triggers a check-in for the dead man switch, resetting the countdown timer.
    */
-  checkInDeadMan(id: string, intervalSeconds: number): number {
-    const db = getDb();
+  async checkInDeadMan(id: string, intervalSeconds: number): Promise<number> {
+    if (!redis) return Date.now();
+
+    const redisKey = `paste:${id}`;
     const nextCheckIn = Date.now() + intervalSeconds * 1000;
-    const stmt = db.prepare('UPDATE pastes SET check_in_due = ? WHERE id = ? AND is_dead_man = 1');
-    const result = stmt.run(nextCheckIn, id);
+    await redis.hset(redisKey, { check_in_due: nextCheckIn });
     return nextCheckIn;
   },
 
   /**
    * Deletes a paste by ID manually.
    */
-  deletePaste(id: string): boolean {
-    const db = getDb();
-    const stmt = db.prepare('DELETE FROM pastes WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  async deletePaste(id: string): Promise<boolean> {
+    if (!redis) return false;
+
+    const redisKey = `paste:${id}`;
+    const deletedCount = await redis.del(redisKey);
+    return deletedCount > 0;
   },
 
   /**
-   * Clean up all expired pastes.
+   * Clean up all expired pastes (no-op with Redis TTL, but kept for interface compatibility)
    */
-  cleanupExpired(): number {
-    const db = getDb();
-    const now = Date.now();
-    const stmt = db.prepare('DELETE FROM pastes WHERE expires_at IS NOT NULL AND expires_at < ?');
-    const result = stmt.run(now);
-    
-    // Prune expired threads too
-    const threadStmt = db.prepare('DELETE FROM threads WHERE expires_at < ?');
-    threadStmt.run(now);
-    
-    return result.changes;
+  async cleanupExpired(): Promise<number> {
+    // Redis handles TTL expiration natively
+    return 0;
   },
 
   /* --- THREAD METHODS --- */
 
-  createThread(id: string, messagesJson: string, expiresInSeconds: number): void {
-    const db = getDb();
+  async createThread(id: string, messagesJson: string, expiresInSeconds: number): Promise<void> {
+    if (!redis) return;
+
     const now = Date.now();
     const expiresAt = now + expiresInSeconds * 1000;
-    const stmt = db.prepare(`
-      INSERT INTO threads (id, messages_json, created_at, expires_at)
-      VALUES (?, ?, ?, ?)
-    `);
-    stmt.run(id, messagesJson, now, expiresAt);
+    const redisKey = `thread:${id}`;
+
+    const rawData = {
+      id,
+      messages_json: messagesJson,
+      created_at: now,
+      expires_at: expiresAt,
+    };
+
+    await redis.hset(redisKey, sanitizeForRedis(rawData));
+    await redis.expire(redisKey, expiresInSeconds);
   },
 
-  getThread(id: string): ThreadRow | null {
-    const db = getDb();
-    const now = Date.now();
-    db.prepare('DELETE FROM threads WHERE expires_at < ?').run(now);
-    
-    const stmt = db.prepare('SELECT * FROM threads WHERE id = ?');
-    const row = stmt.get(id) as ThreadRow | undefined;
-    return row || null;
+  async getThread(id: string): Promise<ThreadRow | null> {
+    if (!redis) return null;
+
+    const redisKey = `thread:${id}`;
+    const rawData = await redis.hgetall(redisKey);
+    return parseThreadRow(rawData);
   },
 
-  updateThread(id: string, messagesJson: string): boolean {
-    const db = getDb();
-    const stmt = db.prepare('UPDATE threads SET messages_json = ? WHERE id = ?');
-    const result = stmt.run(messagesJson, id);
-    return result.changes > 0;
+  async updateThread(id: string, messagesJson: string): Promise<boolean> {
+    if (!redis) return false;
+
+    const redisKey = `thread:${id}`;
+    const exists = await redis.exists(redisKey);
+    if (!exists) return false;
+
+    await redis.hset(redisKey, { messages_json: messagesJson });
+    return true;
   },
 
   /**
    * Increments scan_count and returns the updated row.
-   * If scan_limit > 0 and scan_count >= scan_limit, deletes the paste (burn).
-   * Returns { burned: true } if the paste was burned.
    */
-  incrementScanCount(id: string): { burned: boolean; scan_count: number; scan_limit: number } {
-    const db = getDb();
-    const row = db.prepare('SELECT scan_limit, scan_count FROM pastes WHERE id = ?').get(id) as { scan_limit: number; scan_count: number } | undefined;
+  async incrementScanCount(id: string): Promise<{ burned: boolean; scan_count: number; scan_limit: number }> {
+    if (!redis) return { burned: false, scan_count: 0, scan_limit: 0 };
+
+    const redisKey = `paste:${id}`;
+    const rawData = await redis.hgetall(redisKey);
+    const row = parsePasteRow(rawData);
     if (!row) return { burned: false, scan_count: 0, scan_limit: 0 };
 
     const newCount = row.scan_count + 1;
-    db.prepare('UPDATE pastes SET scan_count = ? WHERE id = ?').run(newCount, id);
+    await redis.hset(redisKey, { scan_count: newCount });
 
     if (row.scan_limit > 0 && newCount >= row.scan_limit) {
-      db.prepare('DELETE FROM pastes WHERE id = ?').run(id);
+      await redis.del(redisKey);
       return { burned: true, scan_count: newCount, scan_limit: row.scan_limit };
     }
     return { burned: false, scan_count: newCount, scan_limit: row.scan_limit };

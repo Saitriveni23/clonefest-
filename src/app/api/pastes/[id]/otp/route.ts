@@ -16,7 +16,7 @@ const otpStore: Record<string, { otp: string; expires: number; verified: boolean
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const paste = dbHelper.getPasteMetadata(id);
+    const paste = await dbHelper.getPasteMetadata(id);
     if (!paste) {
       return NextResponse.json({ error: 'Paste not found.' }, { status: 404 });
     }

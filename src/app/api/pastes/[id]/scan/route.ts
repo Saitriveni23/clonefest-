@@ -13,7 +13,7 @@ interface Params {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const result = dbHelper.incrementScanCount(id);
+    const result = await dbHelper.incrementScanCount(id);
 
     return NextResponse.json({
       success: true,

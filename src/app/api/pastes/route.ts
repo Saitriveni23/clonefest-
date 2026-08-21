@@ -3,7 +3,7 @@ import { dbHelper } from '@/lib/db';
 import crypto from 'crypto';
 
 // Custom ID generator using characters that are safe for URLs
-function generateUniqueId(length = 8): string {
+async function generateUniqueId(length = 8): Promise<string> {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   // Try up to 10 times to find a unique ID
@@ -14,7 +14,7 @@ function generateUniqueId(length = 8): string {
       result += chars[bytes[i] % chars.length];
     }
     // Check if ID is unique
-    const existing = dbHelper.getPaste(result);
+    const existing = await dbHelper.getPaste(result);
     if (!existing) {
       return result;
     }
@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate unique ID
-    const id = generateUniqueId();
+    const id = await generateUniqueId();
 
     // Save to SQLite database
-    dbHelper.createPaste({
+    await dbHelper.createPaste({
       id,
       ciphertext,
       iv,

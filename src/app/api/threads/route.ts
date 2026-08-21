@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbHelper } from '@/lib/db';
 import crypto from 'crypto';
 
-function generateUniqueId(length = 8): string {
+async function generateUniqueId(length = 8): Promise<string> {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -11,7 +11,7 @@ function generateUniqueId(length = 8): string {
     for (let i = 0; i < length; i++) {
       result += chars[bytes[i] % chars.length];
     }
-    const existing = dbHelper.getThread(result);
+    const existing = await dbHelper.getThread(result);
     if (!existing) {
       return result;
     }
@@ -31,10 +31,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const id = generateUniqueId();
+    const id = await generateUniqueId();
     const expSeconds = expires_in_seconds ? Number(expires_in_seconds) : 86400; // Default 1 day
 
-    dbHelper.createThread(id, messages_json, expSeconds);
+    await dbHelper.createThread(id, messages_json, expSeconds);
 
     return NextResponse.json({ id });
   } catch (error: any) {

@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const thread = dbHelper.getThread(id);
+    const thread = await dbHelper.getThread(id);
 
     if (!thread) {
       return NextResponse.json(
@@ -47,7 +47,7 @@ export async function PUT(
       );
     }
 
-    const updated = dbHelper.updateThread(id, messages_json);
+    const updated = await dbHelper.updateThread(id, messages_json);
 
     if (!updated) {
       return NextResponse.json(
