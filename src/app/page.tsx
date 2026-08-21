@@ -4,26 +4,38 @@ import { ShieldAlert, Key, Zap, Lock } from 'lucide-react';
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen scanlines bg-[#05070a] text-zinc-300 font-mono">
       <Header />
+
+      {/* Agency Tactical HUD Banner */}
+      <div className="w-full bg-zinc-950 border-b border-zinc-800 text-[10px] px-4 py-2 flex flex-wrap justify-between items-center text-zinc-500 font-mono">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>STATUS: OPERATIONAL (SECURE GATEWAY)</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span>COVERT ROUTING: ACTIVE</span>
+          <span>LEVEL: CLASSIFIED // TOP SECRET</span>
+          <span>SYSTEM TIME: {new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC</span>
+        </div>
+      </div>
 
       {/* Main content body */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 space-y-12">
         
-        {/* Hero Section */}
+        {/* Tactical Agency Hero Section */}
         <section className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-violet-500/20 bg-violet-500/5 text-violet-400 text-xs font-semibold uppercase tracking-wider animate-float">
-            <Lock className="w-3.5 h-3.5" />
-            <span>End-to-End Secure Platform</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded border border-emerald-500/30 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold tracking-widest uppercase">
+            <Lock className="w-3 h-3" />
+            <span>CYBERSECURITY DEFENSE UNIT // DISPERSAL PROTOCOLS</span>
           </div>
           
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-text-main leading-[1.1] md:leading-[1.15]">
-            Zero-Knowledge <br className="hidden sm:inline" />
-            <span className="text-gradient">Secure Note Sharing</span>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-[1.1] font-sans">
+            Cipher<span className="text-teal-400">Drop</span> Cryptographic Intelligence Portal
           </h1>
           
-          <p className="text-base sm:text-lg text-text-muted max-w-2xl mx-auto leading-relaxed">
-            Encrypt your sensitive text, source code, or files entirely in your browser before storing. The decryption key never leaves your system.
+          <p className="text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+            Coercion-resistant zero-knowledge secure node for agency intelligence sharing. All data is client-side encrypted before uploading. Senders retain full panic revoke overrides.
           </p>
         </section>
 

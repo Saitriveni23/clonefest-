@@ -134,6 +134,56 @@ export function PasteForm() {
   const [scanLimitInput, setScanLimitInput] = useState('0');
   const [biometricRequired, setBiometricRequired] = useState(false);
 
+  // Guided Setup task wizard
+  const [selectedTask, setSelectedTask] = useState<'text' | 'file' | 'voice' | 'sketch' | 'vault' | 'chat'>('text');
+  const [showAdvancedOverrides, setShowAdvancedOverrides] = useState(false);
+
+  const applyTaskBlueprint = (task: 'text' | 'file' | 'voice' | 'sketch' | 'vault' | 'chat') => {
+    setSelectedTask(task);
+    setSuccessMode(null);
+
+    // Reset advanced overrides
+    setIsDecoyEnabled(false);
+    setIsDeadMan(false);
+    setIsTimeLocked(false);
+    setIsDrawingEnabled(false);
+    setMaxAttempts('0');
+    setAllowedCountries('');
+    setOtpRequired(false);
+    setReleaseAfterDate('');
+    setScanLimitInput('0');
+    setBiometricRequired(false);
+
+    if (task === 'text') {
+      setMethod('direct');
+      setFile(null);
+      setBurnAfterRead(true);
+      setMaxAttempts('3'); // Auto-destruct guess shield
+    } else if (task === 'file') {
+      setMethod('direct');
+      setBurnAfterRead(false);
+      setBiometricRequired(true); // Requiring biometric touch ID
+    } else if (task === 'voice') {
+      setMethod('direct');
+      setFile(null);
+      setBurnAfterRead(false);
+      setScanLimitInput('1'); // Destroy after 1 scan
+    } else if (task === 'sketch') {
+      setMethod('direct');
+      setFile(null);
+      setIsDrawingEnabled(true); // Show canvas
+      setBurnAfterRead(false);
+    } else if (task === 'vault') {
+      setMethod('threshold'); // Shamir multi-custodian
+      setFile(null);
+      setBurnAfterRead(false);
+    } else if (task === 'chat') {
+      setMethod('chat'); // Polling Chat Room
+      setFile(null);
+      setBurnAfterRead(false);
+    }
+  };
+
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -1427,10 +1477,31 @@ export function PasteForm() {
             </>
           )}
 
-          {/* Advanced Cryptographic Innovations: Decoy Vault & Whistleblower Dead Man (Only for Direct Mode) */}
+          {/* Advanced Cryptographic Innovations Accordion (Only for Direct Mode) */}
           {method === 'direct' && (
-            <div className="space-y-4 pt-4 border-t border-panel-border text-left">
-              <span className="text-[10px] font-bold text-text-muted block uppercase tracking-wider">
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedOverrides(!showAdvancedOverrides)}
+                className="w-full flex items-center justify-between p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900/60 text-xs font-bold text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer font-mono"
+              >
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  {showAdvancedOverrides 
+                    ? '▼ HIDE ADVANCED SECURITY OVERRIDES' 
+                    : '▶ SHOW ADVANCED SECURITY OVERRIDES (COERCION DECOY, DEAD MAN, FENCES, BIOMETRIC)'
+                  }
+                </span>
+                <span className="text-[10px] text-zinc-600">
+                  {showAdvancedOverrides ? 'COLLAPSE' : 'EXPAND PANEL'}
+                </span>
+              </button>
+            </div>
+          )}
+
+          {method === 'direct' && showAdvancedOverrides && (
+            <div className="space-y-6 pt-4 border-t border-panel-border text-left animate-slide-in">
+              <span className="text-[10px] font-bold text-text-muted block uppercase tracking-wider font-mono">
                 Cryptographic Innovation Layers
               </span>
               
@@ -1576,7 +1647,7 @@ export function PasteForm() {
 
               {/* Duress Self-Destruct Switch */}
               <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-3 animate-slide-in">
-                <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5 font-mono">
                   <ShieldCheck className="w-4 h-4 animate-pulse" />
                   Duress Self-Destruct Key (Optional coercion override)
                 </span>
@@ -1591,108 +1662,126 @@ export function PasteForm() {
                   />
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Advanced Guess limits and Geofencing parameters */}
-          {method === 'direct' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-panel-border text-left">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-rose-400" />
-                  Guess Attempt Limit (Auto-Destruct)
-                </label>
-                <input
-                  type="number"
-                  placeholder="Attempts allowed (e.g. 3, or 0 for unlimited)..."
-                  value={maxAttempts}
-                  onChange={(e) => setMaxAttempts(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-rose-500"
-                  min="0"
-                />
-              </div>
+              {/* Advanced Guess limits and Geofencing parameters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-panel-border">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5 font-mono">
+                    <ShieldAlert className="w-4 h-4 text-rose-400" />
+                    Guess Attempt Limit (Auto-Destruct)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Attempts allowed (e.g. 3, or 0 for unlimited)..."
+                    value={maxAttempts}
+                    onChange={(e) => setMaxAttempts(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-rose-500"
+                    min="0"
+                  />
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <Globe className="w-4 h-4 text-sky-400" />
-                  Geo-Fence: Restricted Countries
-                </label>
-                <input
-                  type="text"
-                  placeholder="Comma separated codes (e.g. US, IN, GB)..."
-                  value={allowedCountries}
-                  onChange={(e) => setAllowedCountries(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-sky-500"
-                />
-              </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5 font-mono">
+                    <Globe className="w-4 h-4 text-sky-400" />
+                    Geo-Fence: Restricted Countries
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Comma separated codes (e.g. US, IN, GB)..."
+                    value={allowedCountries}
+                    onChange={(e) => setAllowedCountries(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-sky-500"
+                  />
+                </div>
 
-              {/* OTP Gate toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                  OTP Identity Gate
-                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Require 6-digit verification)</span>
-                </label>
-                <button
-                  id="toggle-otp-required"
-                  type="button"
+                {/* OTP Gate toggle container */}
+                <div 
                   onClick={() => setOtpRequired(!otpRequired)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${otpRequired ? 'bg-cyan-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                    otpRequired 
+                      ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-200 shadow-sm' 
+                      : 'bg-zinc-950/40 border-zinc-800 hover:border-zinc-700 text-zinc-400'
+                  }`}
                 >
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${otpRequired ? 'left-5' : 'left-0.5'}`} />
-                </button>
-              </div>
+                  <label className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer font-mono">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    OTP Identity Gate
+                    <span className="text-[10px] text-zinc-500 font-normal ml-1 font-sans">(Require 6-digit verification)</span>
+                  </label>
+                  <button
+                    id="toggle-otp-required"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOtpRequired(!otpRequired);
+                    }}
+                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${otpRequired ? 'bg-cyan-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${otpRequired ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
 
-              {/* Time-release date/time picker */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-violet-400" />
-                  Schedule Time-Release
-                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Leave blank for instant access)</span>
-                </label>
-                <input
-                  id="time-release-input"
-                  type="datetime-local"
-                  value={releaseAfterDate}
-                  onChange={e => setReleaseAfterDate(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-violet-500 text-text-main"
-                  min={new Date().toISOString().slice(0, 16)}
-                />
-              </div>
+                {/* Time-release date/time picker */}
+                <div className="space-y-1.5 font-mono">
+                  <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-violet-400" />
+                    Schedule Time-Release
+                    <span className="text-[10px] text-text-ghost font-normal ml-1 font-sans">(Leave blank for instant access)</span>
+                  </label>
+                  <input
+                    id="time-release-input"
+                    type="datetime-local"
+                    value={releaseAfterDate}
+                    onChange={e => setReleaseAfterDate(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-violet-500 text-text-main"
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
+                </div>
 
-              {/* QR Scan Limit */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4 text-orange-400" />
-                  Self-Destructing QR — Scan Limit
-                  <span className="text-[10px] text-text-ghost font-normal ml-1">(0 = unlimited)</span>
-                </label>
-                <input
-                  id="scan-limit-input"
-                  type="number"
-                  min="0"
-                  placeholder="Max QR scans before burn (e.g. 3)..."
-                  value={scanLimitInput}
-                  onChange={e => setScanLimitInput(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-orange-500"
-                />
-              </div>
+                {/* QR Scan Limit */}
+                <div className="space-y-1.5 font-mono">
+                  <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-orange-400" />
+                    Self-Destructing QR — Scan Limit
+                    <span className="text-[10px] text-text-ghost font-normal ml-1 font-sans">(0 = unlimited)</span>
+                  </label>
+                  <input
+                    id="scan-limit-input"
+                    type="number"
+                    min="0"
+                    placeholder="Max QR scans before burn (e.g. 3)..."
+                    value={scanLimitInput}
+                    onChange={e => setScanLimitInput(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs focus:ring-orange-500"
+                  />
+                </div>
 
-              {/* Biometric Gate toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
-                  <span className="text-base">🫆</span>
-                  Biometric Gate
-                  <span className="text-[10px] text-text-ghost font-normal ml-1">(Face ID / Touch ID / Windows Hello)</span>
-                </label>
-                <button
-                  id="toggle-biometric-required"
-                  type="button"
+                {/* Biometric Gate toggle container */}
+                <div 
                   onClick={() => setBiometricRequired(!biometricRequired)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${biometricRequired ? 'bg-emerald-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                    biometricRequired 
+                      ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200 shadow-sm' 
+                      : 'bg-zinc-950/40 border-zinc-800 hover:border-zinc-700 text-zinc-400'
+                  }`}
                 >
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${biometricRequired ? 'left-5' : 'left-0.5'}`} />
-                </button>
+                  <label className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer font-mono">
+                    <span className="text-base mr-1">🫆</span>
+                    Biometric Gate
+                    <span className="text-[10px] text-zinc-500 font-normal ml-1 font-sans">(Face ID / Touch ID)</span>
+                  </label>
+                  <button
+                    id="toggle-biometric-required"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBiometricRequired(!biometricRequired);
+                    }}
+                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${biometricRequired ? 'bg-emerald-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${biometricRequired ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
               </div>
             </div>
           )}
