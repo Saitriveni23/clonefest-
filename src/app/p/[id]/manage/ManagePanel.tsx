@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ShieldAlert, Clock, Eye, Trash2, Loader2, 
+  ShieldAlert, Eye, Trash2, Loader2,
   CheckCircle, ArrowLeft, Lock, Calendar, EyeOff,
   RefreshCw, AlertCircle, Globe
 } from 'lucide-react';
 import Link from 'next/link';
 import { Toast, ToastType } from '@/components/Toast';
+import { Tooltip } from '@/components/Tooltip';
 
 interface ManagePanelProps {
   id: string;
@@ -52,6 +53,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
   const [isDuressActive, setIsDuressActive] = useState(false);
 
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     // Extract keys from URL hash fragment
@@ -113,6 +115,22 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
     fetchMetadata();
   }, [id]);
+
+  // Live tick for the dead-man switch countdown display
+  useEffect(() => {
+    if (!metadata?.is_dead_man || !metadata.check_in_due) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [metadata?.is_dead_man, metadata?.check_in_due]);
+
+  const formatCountdown = (ms: number) => {
+    if (ms <= 0) return '00:00:00';
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
   const handlePanicRevoke = async () => {
     if (!confirm('🚨 PANIC REVOKE: Are you absolutely sure you want to permanently delete this paste immediately? This action is irreversible.')) {
@@ -228,14 +246,15 @@ export default function ManagePanel({ id }: ManagePanelProps) {
   }
 
   const isRead = metadata?.read_at !== null || (metadata?.burn_after_read && metadata?.view_count > 0);
+  const checkInMsLeft = metadata?.check_in_due && now ? metadata.check_in_due - now : 0;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
 
@@ -271,228 +290,180 @@ export default function ManagePanel({ id }: ManagePanelProps) {
         </div>
       )}
 
-      <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-8">
-        {/* Title */}
-        <div className="flex items-center gap-3 border-b border-panel-border pb-5 text-left">
-          <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center border border-violet-500/20">
-            <Lock className="w-6 h-6 text-violet-400" />
-          </div>
-          <div className="flex flex-col">
-            <h2 className="text-xl font-bold text-text-main">Paste Governance & Receipt</h2>
-            <span className="text-[10px] text-text-ghost uppercase font-semibold tracking-wider">
-              Control Panel • ID: {metadata?.id}
-            </span>
-          </div>
-        </div>
+      {/* Header Section */}
+      <div>
+        <h1 className="text-2xl font-bold text-violet-300 mb-1.5 flex items-center gap-2.5">
+          <Lock className="w-6 h-6 text-teal-400" />
+          Command Dashboard
+        </h1>
+        <p className="text-xs font-mono text-text-ghost">
+          CONTROL PANEL // ID: {metadata?.id} {'// ENCRYPTION: AES-256-GCM'}
+        </p>
+      </div>
 
-        {/* Read Receipt Status Visual */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="glass-panel p-5 rounded-2xl flex flex-col text-left space-y-3 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-text-muted">Read Receipt Status</span>
-              {isRead ? (
-                <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                  Opened
-                </span>
-              ) : (
-                <span className="bg-amber-500/10 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase animate-pulse">
-                  Unread
-                </span>
-              )}
-            </div>
-
-            {isRead ? (
-              <div className="space-y-1">
-                <p className="text-2xl font-black text-text-main flex items-center gap-2">
-                  <Eye className="w-7 h-7 text-emerald-400" />
-                  Read Confirmed
-                </p>
-                <p className="text-xs text-text-ghost">
-                  Recipient read this paste at: <br />
-                  <span className="font-semibold text-text-muted">
-                    {metadata?.read_at ? new Date(metadata.read_at).toLocaleString() : 'Unknown Time'}
-                  </span>
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <p className="text-2xl font-black text-text-main flex items-center gap-2">
-                  <EyeOff className="w-7 h-7 text-amber-400" />
-                  Still Encrypted
-                </p>
-                <p className="text-xs text-text-ghost">
-                  Nobody has accessed this paste yet. The secret is sitting safe in the database.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Paste Info Card */}
-          <div className="glass-panel p-5 rounded-2xl flex flex-col text-left space-y-4">
-            <span className="text-xs font-semibold text-text-muted">Paste Settings</span>
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <Calendar className="w-4 h-4 text-violet-400" />
-                <span>Created: {metadata ? new Date(metadata.created_at).toLocaleString() : ''}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <Clock className="w-4 h-4 text-teal-400" />
-                <span>
-                  Expires: {metadata?.expires_at ? new Date(metadata.expires_at).toLocaleString() : 'Never'}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column */}
+        <div className="lg:col-span-9 flex flex-col gap-6">
+          {/* Status Bento Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Read Receipt Status */}
+            <div className="glass-panel rounded-xl p-5 relative overflow-hidden">
+              <div className="flex items-start justify-between mb-3">
+                {isRead ? <Eye className="w-6 h-6 text-emerald-400" /> : <EyeOff className="w-6 h-6 text-amber-400" />}
+                <span className={`text-[10px] font-mono font-bold px-2 py-1 uppercase tracking-widest border ${isRead ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/40 animate-pulse'}`}>
+                  {isRead ? 'Opened' : 'Unread'}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <ShieldAlert className="w-4 h-4 text-rose-400" />
-                <span>
-                  Self-Destruct (Burn): {metadata?.burn_after_read ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-                <span>
-                  Wrong Guess Limit: {metadata?.max_attempts ? `${metadata.max_attempts} attempts` : 'Unlimited'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <Globe className="w-4 h-4 text-sky-400" />
-                <span>
-                  Allowed Regions: {metadata?.allowed_countries ? metadata.allowed_countries.toUpperCase() : 'All (Worldwide)'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Governance Audit Log Console */}
-        <div className="pt-6 border-t border-panel-border space-y-4 text-left">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-text-main flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-sky-400 animate-pulse" />
-              Geographic & Access Security Log
-            </h3>
-            <p className="text-xs text-text-ghost leading-relaxed">
-              Real-time audit log of access attempts to this zero-knowledge paste. Displays security flags, geographic locations, and client decryption outcomes.
-            </p>
-          </div>
-
-          <div className="bg-bg-main border border-panel-border rounded-xl p-4 font-mono text-[10px] text-sky-300 space-y-2.5">
-            {/* Log item 1: success check */}
-            {isRead ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b border-panel-border/30">
-                <span className="text-[10px] text-text-ghost">{metadata?.read_at ? new Date(metadata.read_at).toISOString() : ''}</span>
-                <span className="text-emerald-400 font-bold">🟢 SUCCESS: Decrypted (IP: 198.51.100.42 [IN])</span>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b border-panel-border/30 text-text-ghost">
-                <span>-</span>
-                <span>No decryption events recorded yet</span>
-              </div>
-            )}
-
-            {/* Log item 2: geofence failure check */}
-            {metadata?.allowed_countries && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b border-panel-border/30">
-                <span className="text-[10px] text-text-ghost">{metadata ? new Date(metadata.created_at + 15000).toISOString() : ''}</span>
-                <span className="text-rose-400 font-bold">🔴 BLOCKED: Geo-Fence Violation (IP: 203.0.113.88 [DE])</span>
-              </div>
-            )}
-
-            {/* Log item 3: attempt limits failure check */}
-            {metadata?.max_attempts ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                <span className="text-[10px] text-text-ghost">{metadata ? new Date(metadata.created_at + 30000).toISOString() : ''}</span>
-                <span className="text-amber-400 font-bold">
-                  🟡 ATTEMPT: Incorrect Password Guess ({metadata.failed_attempts || 0}/{metadata.max_attempts})
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Dead Man's Switch Whistleblower check-in form */}
-        {metadata?.is_dead_man && (
-          <div className="pt-6 border-t border-panel-border space-y-4 text-left">
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-text-main flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-amber-400 animate-pulse" />
-                Whistleblower Switch Check-In
-              </h3>
-              <p className="text-xs text-text-ghost leading-relaxed">
-                Keep this switch locked by checking in before the countdown expires. Failing to check in will release the decryption keys to anyone who has the share link.
+              <h3 className="text-sm font-bold text-text-main mb-1">{isRead ? 'Read Confirmed' : 'Still Encrypted'}</h3>
+              <p className="text-[11px] text-text-ghost leading-relaxed">
+                {isRead
+                  ? <>Opened at {metadata?.read_at ? new Date(metadata.read_at).toLocaleString() : 'Unknown Time'}</>
+                  : 'Nobody has accessed this paste yet.'}
               </p>
             </div>
 
-            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <span className="text-[10px] text-text-ghost uppercase font-bold">Release Countdown</span>
-                <p className="text-base font-bold text-amber-400">
-                  {metadata.check_in_due ? new Date(metadata.check_in_due).toLocaleString() : 'Expired / Released'}
-                </p>
+            {/* Access Controls */}
+            <div className="glass-panel rounded-xl p-5">
+              <div className="flex items-start justify-between mb-3">
+                <ShieldAlert className="w-6 h-6 text-violet-300" />
+                <span className="text-[10px] font-mono px-2 py-1 uppercase tracking-widest border border-outline-variant text-text-muted">
+                  Config
+                </span>
               </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-text-ghost uppercase font-bold">Check-In Interval</span>
-                <p className="text-xs text-text-muted">
-                  Every {metadata.check_in_interval ? (metadata.check_in_interval / 3600).toFixed(1) : ''} hours
-                </p>
+              <h3 className="text-sm font-bold text-text-main mb-2">Access Controls</h3>
+              <div className="space-y-1.5 text-[11px] text-text-muted font-mono">
+                <div className="flex justify-between"><span>Burn After Read</span><span className={metadata?.burn_after_read ? 'text-teal-400' : 'text-text-ghost'}>{metadata?.burn_after_read ? 'ON' : 'OFF'}</span></div>
+                <div className="flex justify-between"><span>Guess Limit</span><span className="text-teal-400">{metadata?.max_attempts ? `${metadata.max_attempts}` : 'None'}</span></div>
+                <div className="flex justify-between"><span>Region Lock</span><span className="text-teal-400">{metadata?.allowed_countries ? metadata.allowed_countries.toUpperCase() : 'Worldwide'}</span></div>
               </div>
             </div>
 
-            <form onSubmit={handleCheckIn} className="flex gap-2.5 max-w-md">
-              <input
-                type="password"
-                placeholder="Enter Check-In Key..."
-                value={checkInKey}
-                onChange={(e) => setCheckInKey(e.target.value)}
-                className="flex-1 glass-input rounded-xl px-4 py-3 text-xs"
-                required
-              />
-              <button
-                type="submit"
-                disabled={isCheckingIn}
-                className="btn-gradient px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isCheckingIn ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                Check-In
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Panic Revoke Action */}
-        <div className="pt-4 border-t border-panel-border space-y-4 text-left">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-text-main flex items-center gap-1.5">
-              <ShieldAlert className="w-4 h-4 text-rose-400 animate-pulse" />
-              Panic Revoke Note
-            </h3>
-            <p className="text-xs text-text-ghost leading-relaxed">
-              Think you sent the note to the wrong person, or want to revoke access early? Hitting the panic button wipes the encrypted database record immediately.
-            </p>
+            {/* Expiry */}
+            <div className="glass-panel rounded-xl p-5">
+              <div className="flex items-start justify-between mb-3">
+                <Calendar className="w-6 h-6 text-violet-300" />
+                <span className="text-[10px] font-mono px-2 py-1 uppercase tracking-widest border border-outline-variant text-text-muted">
+                  Lifecycle
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-text-main mb-2">Lifecycle</h3>
+              <div className="space-y-1.5 text-[11px] text-text-muted font-mono">
+                <div className="flex justify-between"><span>Created</span><span className="text-teal-400">{metadata ? new Date(metadata.created_at).toLocaleDateString() : ''}</span></div>
+                <div className="flex justify-between"><span>Expires</span><span className="text-teal-400">{metadata?.expires_at ? new Date(metadata.expires_at).toLocaleDateString() : 'Never'}</span></div>
+                <div className="flex justify-between"><span>Views</span><span className="text-teal-400">{metadata?.view_count ?? 0}</span></div>
+              </div>
+            </div>
           </div>
 
-          <button
-            onClick={handlePanicRevoke}
-            disabled={isRevoking}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-bold rounded-xl text-xs shadow-lg shadow-rose-900/20 hover:scale-[1.01] active:scale-100 transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isRevoking ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Revoking Note...
-              </>
-            ) : (
-              <>
-                <Trash2 className="w-4 h-4" />
-                Trigger Panic Revoke (Wipe Secret)
-              </>
-            )}
-          </button>
+          {/* Access Log Table */}
+          <div className="glass-panel rounded-xl flex flex-col">
+            <div className="p-5 border-b border-panel-border flex items-center gap-2">
+              <Globe className="w-4 h-4 text-sky-400 animate-pulse" />
+              <h3 className="text-sm font-bold text-text-main">Geographic & Access Security Log</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left font-mono text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-btn-sec-bg border-b border-panel-border text-text-ghost uppercase tracking-wider">
+                    <th className="p-3 font-medium">Timestamp (UTC)</th>
+                    <th className="p-3 font-medium">Event</th>
+                    <th className="p-3 font-medium">Result</th>
+                  </tr>
+                </thead>
+                <tbody className="text-text-muted divide-y divide-white/5">
+                  {isRead ? (
+                    <tr>
+                      <td className="p-3">{metadata?.read_at ? new Date(metadata.read_at).toISOString() : ''}</td>
+                      <td className="p-3">Decryption</td>
+                      <td className="p-3 text-emerald-400 font-bold">[OK]</td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td className="p-3">-</td>
+                      <td className="p-3">No decryption events recorded yet</td>
+                      <td className="p-3 text-text-ghost">[—]</td>
+                    </tr>
+                  )}
+                  {metadata?.allowed_countries && (
+                    <tr>
+                      <td className="p-3">{metadata ? new Date(metadata.created_at + 15000).toISOString() : ''}</td>
+                      <td className="p-3">Geo-Fence Violation</td>
+                      <td className="p-3 text-rose-400 font-bold">[BLOCKED]</td>
+                    </tr>
+                  )}
+                  {!!metadata?.max_attempts && (
+                    <tr>
+                      <td className="p-3">{metadata ? new Date(metadata.created_at + 30000).toISOString() : ''}</td>
+                      <td className="p-3">Incorrect Password Guess ({metadata.failed_attempts || 0}/{metadata.max_attempts})</td>
+                      <td className="p-3 text-amber-400 font-bold">[ATTEMPT]</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
+        {/* Right Column: Emergency Controls */}
+        <div className="lg:col-span-3 flex flex-col gap-6">
+          <div className="glass-panel rounded-xl p-6 flex flex-col border-t-2 border-t-rose-500">
+            <h2 className="text-base font-bold text-rose-400 mb-5 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              Emergency
+            </h2>
+
+            <p className="text-[11px] text-text-ghost leading-relaxed mb-4">
+              Sent the note to the wrong person? Revoking wipes the encrypted database record immediately and irreversibly.
+            </p>
+
+            <Tooltip text="Permanently and immediately deletes this paste from the database. Cannot be undone." className="w-full">
+              <button
+                onClick={handlePanicRevoke}
+                disabled={isRevoking}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-rose-950/60 border border-rose-500/50 text-rose-300 hover:bg-rose-900/60 font-mono text-xs uppercase tracking-wider rounded-sm transition-colors shadow-[0_0_15px_rgba(255,180,171,0.15)] cursor-pointer disabled:opacity-50"
+              >
+                {isRevoking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {isRevoking ? 'Revoking...' : 'Revoke Access'}
+              </button>
+            </Tooltip>
+
+            {metadata?.is_dead_man && (
+              <>
+                <div className="mt-8 pt-6 border-t border-rose-500/20 flex flex-col items-center text-center">
+                  <span className="text-[10px] font-mono text-rose-400 uppercase tracking-widest mb-2">Dead-Man&apos;s Switch</span>
+                  <div
+                    className="text-3xl text-teal-400 font-bold tabular-nums tracking-tighter font-mono"
+                    style={{ textShadow: '0 0 10px rgba(78, 222, 163, 0.5)' }}
+                  >
+                    {metadata.check_in_due ? formatCountdown(checkInMsLeft) : '--:--:--'}
+                  </div>
+                  <span className="text-[9px] font-mono text-text-ghost mt-1">UNTIL AUTO-RELEASE</span>
+                </div>
+
+                <form onSubmit={handleCheckIn} className="flex flex-col gap-2 mt-4">
+                  <input
+                    type="password"
+                    placeholder="Check-In Key..."
+                    value={checkInKey}
+                    onChange={(e) => setCheckInKey(e.target.value)}
+                    className="glass-input rounded-md px-3 py-2.5 text-xs"
+                    required
+                  />
+                  <Tooltip text="Resets the countdown, proving you're still safe and preventing the switch from releasing the secret.">
+                    <button
+                      type="submit"
+                      disabled={isCheckingIn}
+                      className="w-full btn-gradient px-4 py-2.5 rounded-md text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isCheckingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      Check-In
+                    </button>
+                  </Tooltip>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

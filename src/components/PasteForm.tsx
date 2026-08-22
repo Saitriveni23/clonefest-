@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
+import { Tooltip } from './Tooltip';
 
 const LANGUAGES = [
   { value: 'plaintext', label: 'Plain Text' },
@@ -721,32 +722,33 @@ export function PasteForm() {
       )}
 
       {/* Sharing Method Tabs */}
-      <div className="flex bg-btn-sec-bg p-1 rounded-2xl border border-panel-border overflow-x-auto gap-1">
+      <div className="flex flex-wrap bg-btn-sec-bg p-1 rounded-2xl border border-panel-border gap-1">
         {[
-          { key: 'direct', label: 'Secure Inbox', icon: Share2 },
-          { key: 'threshold', label: 'Threshold Vault', icon: Users2 },
-          { key: 'chat', label: 'E2E Polling Chat', icon: MessageSquareCode },
-          { key: 'stego', label: 'Covert Stego', icon: ImageIcon },
-          { key: 'slack', label: 'Slack Command', icon: Bot },
+          { key: 'direct', label: 'Secure Inbox', icon: Share2, tooltip: 'The standard way to share a secret: one encrypted link for the recipient, plus a separate management link for you to track reads or revoke it.' },
+          { key: 'threshold', label: 'Threshold Vault', icon: Users2, tooltip: 'Splits the decryption key into multiple shares. Requires several people to combine their shares before the secret can be unlocked.' },
+          { key: 'chat', label: 'E2E Polling Chat', icon: MessageSquareCode, tooltip: 'Opens a temporary encrypted chat room link instead of a single note, for a back-and-forth conversation.' },
+          { key: 'stego', label: 'Covert Stego', icon: ImageIcon, tooltip: 'Hides the secret link inside an ordinary-looking PNG image instead of sending a link directly.' },
+          { key: 'slack', label: 'Slack Command', icon: Bot, tooltip: 'Simulates sharing a secret via a Slack "/secret" bot command.' },
         ].map((tab) => {
           const Icon = tab.icon;
           return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => {
-                setMethod(tab.key as any);
-                setSuccessMode(null);
-              }}
-              className={`flex items-center justify-center gap-2 py-3 px-4 text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer flex-1 ${
-                method === tab.key
-                  ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md'
-                  : 'text-text-muted hover:text-text-main'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
+            <Tooltip key={tab.key} text={tab.tooltip} className="flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMethod(tab.key as any);
+                  setSuccessMode(null);
+                }}
+                className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+                  method === tab.key
+                    ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md'
+                    : 'text-text-muted hover:text-text-main'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -1400,36 +1402,42 @@ export function PasteForm() {
                 ) : (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-                      >
-                        <Upload className="w-4 h-4 text-violet-400" />
-                        Attach Secure File (2MB Max)
-                      </button>
+                      <Tooltip text="Attach a file (max 2MB) — it's encrypted client-side and bundled alongside your text." className="w-full">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                        >
+                          <Upload className="w-4 h-4 text-violet-400" />
+                          Attach Secure File (2MB Max)
+                        </button>
+                      </Tooltip>
 
-                      <button
-                        type="button"
-                        onClick={startRecording}
-                        className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-                      >
-                        <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
-                        Record Voice Memo
-                      </button>
+                      <Tooltip text="Record an audio memo from your microphone to send instead of, or alongside, text." className="w-full">
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                        >
+                          <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
+                          Record Voice Memo
+                        </button>
+                      </Tooltip>
 
-                      <button
-                        type="button"
-                        onClick={() => setIsDrawingEnabled(!isDrawingEnabled)}
-                        className={`flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed transition-all cursor-pointer text-xs font-semibold ${
-                          isDrawingEnabled 
-                            ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-bold' 
-                            : 'border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-text-muted hover:text-text-main'
-                        }`}
-                      >
-                        <Cpu className="w-4 h-4 text-sky-400" />
-                        Draw Secure Sketch
-                      </button>
+                      <Tooltip text="Open a drawing canvas for diagrams or signatures — the sketch is encrypted along with your note." className="w-full">
+                        <button
+                          type="button"
+                          onClick={() => setIsDrawingEnabled(!isDrawingEnabled)}
+                          className={`w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed transition-all cursor-pointer text-xs font-semibold ${
+                            isDrawingEnabled
+                              ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-bold'
+                              : 'border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          <Cpu className="w-4 h-4 text-sky-400" />
+                          Draw Secure Sketch
+                        </button>
+                      </Tooltip>
                     </div>
 
                     {isDrawingEnabled && (
@@ -1916,24 +1924,26 @@ export function PasteForm() {
 
           {/* Form Actions */}
           <div className="flex justify-end pt-4">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full md:w-auto btn-gradient font-bold px-8 py-4 rounded-xl flex items-center justify-center gap-2 text-sm shadow-xl active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Securing Channel Data...
-                </>
-              ) : (
-                <>
-                  {method === 'chat' && 'Create Chat Thread Link'}
-                  {method !== 'chat' && 'Securely Create Paste'}
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
-            </button>
+            <Tooltip text="Encrypts everything above in your browser, then uploads only the ciphertext — the server never sees your plaintext." className="w-full md:w-auto">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full md:w-auto btn-gradient font-bold px-8 py-4 rounded-xl flex items-center justify-center gap-2 text-sm shadow-xl active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Securing Channel Data...
+                  </>
+                ) : (
+                  <>
+                    {method === 'chat' && 'Create Chat Thread Link'}
+                    {method !== 'chat' && 'Securely Create Paste'}
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+            </Tooltip>
           </div>
           </>
           )}

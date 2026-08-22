@@ -5,10 +5,11 @@ import { decryptData } from '@/lib/crypto';
 import { reconstructKey } from '@/lib/sss';
 import { 
   Lock, Unlock, Clock, FileText, Calendar,
-  Trash2, Download, Copy, Check, QrCode, ShieldAlert, ShieldCheck,
+  Trash2, Download, Copy, Check, QrCode, ShieldCheck,
   Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu
 } from 'lucide-react';
 import { Toast, ToastType } from './Toast';
+import { Tooltip } from './Tooltip';
 
 interface PasteViewProps {
   id: string;
@@ -944,34 +945,42 @@ export function PasteView({ id }: PasteViewProps) {
   // 4. Password decryption prompt screen (non-SSS)
   if (isPasswordProtected && !payload) {
     return (
-      <div className="max-w-md mx-auto py-12 px-6 glass-panel rounded-2xl border-panel-border bg-btn-sec-bg/5 text-center space-y-6">
-        <div className="w-14 h-14 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto border border-violet-500/20">
-          <Lock className="w-6 h-6 text-violet-400" />
-        </div>
-        
-        <div className="space-y-1.5">
-          <h3 className="text-lg font-bold text-text-main">Password Protected Paste</h3>
-          <p className="text-xs text-text-muted">
-            This paste requires a password for client-side decryption. The server does not know this password.
-          </p>
+      <div className="max-w-2xl mx-auto glass-panel rounded p-6 md:p-10 relative shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-violet-400 shadow-[0_0_10px_#a78bfa]" />
+        <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_8px_#2dd4bf] animate-pulse" />
+
+        <div className="flex justify-between items-start mb-8 border-b border-panel-border pb-4">
+          <div className="text-left space-y-1">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-text-main tracking-tight font-sans">DECRYPT PAYLOAD</h1>
+            <p className="text-xs font-mono text-text-muted">ID: {id} {'// STATUS: LOCKED'}</p>
+          </div>
+          <div className="bg-emerald-500/10 border border-emerald-500/40 px-3 py-1 text-emerald-400 text-[10px] font-mono uppercase tracking-widest shrink-0">
+            TOP SECRET // CLASSIFIED
+          </div>
         </div>
 
-        <form 
+        <form
           onSubmit={(e) => {
             e.preventDefault();
             handleDecrypt();
           }}
-          className="space-y-4"
+          className="flex flex-col gap-6 py-4 items-center w-full max-w-md mx-auto"
         >
-          <input
-            type="password"
-            placeholder="Enter decryption password..."
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full glass-input rounded-xl px-4 py-3 text-sm"
-            required
-            autoFocus
-          />
+          <div className="w-full text-left">
+            <label className="block text-xs font-mono text-teal-400 mb-2">Master Password Required</label>
+            <div className="relative w-full">
+              <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-ghost" />
+              <input
+                type="password"
+                placeholder="Enter Decryption Key..."
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="terminal-input w-full text-text-main font-mono text-sm p-3 pl-10 rounded-md"
+                required
+                autoFocus
+              />
+            </div>
+          </div>
 
           {decryptionError && (
             <p className="text-xs text-rose-400 font-semibold animate-pulse">
@@ -982,7 +991,7 @@ export function PasteView({ id }: PasteViewProps) {
           <button
             type="submit"
             disabled={isDecrypting}
-            className="w-full btn-gradient font-bold py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="w-full btn-gradient font-bold font-mono py-3.5 rounded-md text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer glow-hover"
           >
             {isDecrypting ? (
               <>
@@ -992,7 +1001,7 @@ export function PasteView({ id }: PasteViewProps) {
             ) : (
               <>
                 <Unlock className="w-4 h-4" />
-                Unlock & Decrypt
+                Decrypt
               </>
             )}
           </button>
@@ -1014,23 +1023,24 @@ export function PasteView({ id }: PasteViewProps) {
 
       {/* Warning banner for burn after read */}
       {burnAfterRead && (
-        <div className="glass-panel border-amber-500/20 bg-amber-500/5 px-4 py-3 rounded-xl flex items-center gap-3 text-left">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
-          <div className="flex flex-col">
-            <span className="text-xs font-bold text-text-main">Burn After Reading Active</span>
-            <span className="text-[10px] text-text-muted">
-              This copy is the only copy. It has been permanently deleted from the database. Closing this page means the content is lost forever!
-            </span>
-          </div>
+        <div className="glass-panel border-rose-500/30 bg-rose-500/10 px-4 py-3 rounded flex items-center gap-3 text-left animate-pulse">
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+          <span className="text-xs font-mono font-semibold text-rose-300 uppercase tracking-wide">
+            Self-Destruct Sequence Initiated: Data Will Be Vaporized Upon Closing This Session.
+          </span>
         </div>
       )}
 
       {/* Header Panel */}
-      <div className="glass-panel rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="glass-panel rounded p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 relative shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-violet-400 shadow-[0_0_10px_#a78bfa]" />
+        <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_8px_#2dd4bf] animate-pulse" />
+
         <div className="flex flex-col text-left space-y-1.5">
           <h2 className="text-xl font-bold text-text-main tracking-tight">{payload?.title || 'Untitled Paste'}</h2>
-          
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-muted">
+          <p className="text-xs font-mono text-text-ghost">ID: {id} {'// STATUS: DECRYPTED'}</p>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-muted pt-1">
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-violet-400" />
               Created {createdAt ? new Date(createdAt).toLocaleString() : 'Unknown'}
@@ -1049,37 +1059,44 @@ export function PasteView({ id }: PasteViewProps) {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2.5">
-          <button
-            onClick={handleCopy}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-violet-400" />}
-            {copied ? 'Copied' : 'Copy Text'}
-          </button>
+          <Tooltip text="Copy the decrypted text to your clipboard." className="flex-1 sm:flex-initial">
+            <button
+              onClick={handleCopy}
+              className="w-full glass-panel flex items-center justify-center gap-1.5 px-4 py-2.5 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Copied' : 'Copy to Buffer'}
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => setShowQr(!showQr)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-          >
-            <QrCode className="w-4 h-4 text-teal-400" />
-            QR Share
-          </button>
+          <Tooltip text="Show a QR code of this page's URL, for opening it quickly on a phone." className="flex-1 sm:flex-initial">
+            <button
+              onClick={() => setShowQr(!showQr)}
+              className="w-full glass-panel flex items-center justify-center gap-1.5 px-4 py-2.5 rounded border border-violet-500/30 text-xs font-mono font-semibold text-violet-400 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+            >
+              <QrCode className="w-4 h-4" />
+              QR Share
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={handleOpenAirGap}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
-          >
-            <Cpu className="w-4 h-4 text-sky-400" />
-            Air-Gap Loop
-          </button>
+          <Tooltip text="Demo: splits this link into 3 QR codes that loop on screen, for transferring to an offline device's camera." className="flex-1 sm:flex-initial">
+            <button
+              onClick={handleOpenAirGap}
+              className="w-full glass-panel flex items-center justify-center gap-1.5 px-4 py-2.5 rounded border border-sky-500/30 text-xs font-mono font-semibold text-sky-400 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+            >
+              <Cpu className="w-4 h-4" />
+              Air-Gap Loop
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={handlePrint}
-            className="p-2.5 rounded-xl border border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover active:scale-95 text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer hidden sm:block"
-            title="Print Page"
-          >
-            <Printer className="w-4 h-4 text-blue-400" />
-          </button>
+          <Tooltip text="Print this page." className="hidden sm:inline-flex">
+            <button
+              onClick={handlePrint}
+              className="glass-panel p-2.5 rounded border border-panel-border text-text-muted hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -1165,17 +1182,17 @@ export function PasteView({ id }: PasteViewProps) {
 
       {/* Main Content Area */}
       <div className="grid grid-cols-1 gap-6">
-        <div className="glass-panel rounded-2xl overflow-hidden flex flex-col">
+        <div className="glass-panel rounded overflow-hidden flex flex-col">
           {/* Top editor border bar */}
           <div className="bg-btn-sec-bg px-6 py-3 border-b border-panel-border flex items-center justify-between">
-            <span className="text-xs font-semibold text-text-muted">Decrypted Content</span>
-            <span className="text-[10px] text-emerald-400 font-semibold uppercase flex items-center gap-1">
+            <span className="text-xs font-mono text-text-muted uppercase tracking-wider">Decrypted Content</span>
+            <span className="text-[10px] text-emerald-400 font-mono font-semibold uppercase flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
               Decrypted Client-Side (Zero-Knowledge)
             </span>
           </div>
 
-          <div className="p-6 md:p-8 overflow-x-auto min-h-[300px]">
+          <div className={`p-6 md:p-8 overflow-x-auto min-h-[300px] ${payload?.format === 'code' ? 'code-viewer' : ''}`}>
             {payload?.format === 'markdown' && renderMarkdown(payload.text)}
             {payload?.format === 'code' && renderCode(payload.text)}
             {payload?.format === 'plaintext' && (
@@ -1213,13 +1230,15 @@ export function PasteView({ id }: PasteViewProps) {
             </div>
 
             {payload.file.name !== 'voice_memo.webm' && (
-              <button
-                onClick={handleDownloadFile}
-                className="w-full sm:w-auto btn-gradient font-bold px-6 py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                Download Decrypted File
-              </button>
+              <Tooltip text="Save the decrypted file to your device." className="w-full sm:w-auto">
+                <button
+                  onClick={handleDownloadFile}
+                  className="w-full glass-panel sm:w-auto px-6 py-3 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 flex items-center justify-center gap-1.5 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Intel
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>

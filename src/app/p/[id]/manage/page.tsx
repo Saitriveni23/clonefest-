@@ -12,7 +12,7 @@ export default async function ManagePage({ params }: ManagePageProps) {
     <div className="flex flex-col min-h-screen">
       <Header />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16">
         <ManagePanel id={id} />
       </main>
 

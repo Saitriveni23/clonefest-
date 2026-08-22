@@ -122,6 +122,45 @@ body {
   transform: translateY(0);
 }
 
+/* Tactical terminal-style input (used by compose textarea) */
+.terminal-input {
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--input-border);
+  transition: all 0.3s ease;
+}
+
+.terminal-input:focus {
+  outline: none;
+  border-bottom: 2px solid #2dd4bf;
+  box-shadow: 0 4px 15px rgba(45, 212, 191, 0.1);
+}
+
+.glow-hover:hover {
+  box-shadow: 0 0 15px rgba(45, 212, 191, 0.3);
+  border-color: rgba(45, 212, 191, 0.5);
+}
+
+/* Dark inset viewer background (decrypted code content) */
+.code-viewer {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Text glow on hover (nav links) */
+.glow-sm {
+  text-shadow: 0 0 8px currentColor;
+}
+
+@keyframes pulse-teal {
+  0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(45, 212, 191, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0); }
+}
+
+.animate-pulse-teal {
+  animation: pulse-teal 2s infinite;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
