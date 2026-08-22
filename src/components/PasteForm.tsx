@@ -381,9 +381,12 @@ export function PasteForm() {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
-    if (uploadedFile.size > 2 * 1024 * 1024) {
+    // Upstash Redis free tier REST API payload size limit is 1MB. 
+    // Base64 encoding + encryption adds ~33% size overhead. 
+    // We restrict attachments to 700KB to guarantee database writes succeed.
+    if (uploadedFile.size > 700 * 1024) {
       setToast({
-        message: 'File size must be under 2MB for secure zero-knowledge storage.',
+        message: 'File size must be under 700KB due to database payload constraints (1MB max).',
         type: 'error',
       });
       return;
@@ -1417,7 +1420,7 @@ export function PasteForm() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-text-muted">
-                    Zero-Knowledge Attachments (2MB Max)
+                    Zero-Knowledge Attachments (700KB Max)
                   </span>
                 </div>
 
@@ -1465,14 +1468,14 @@ export function PasteForm() {
                 ) : (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      <Tooltip text="Attach a file (max 2MB) — it's encrypted client-side and bundled alongside your text." className="w-full">
+                      <Tooltip text="Attach a file (max 700KB) — it's encrypted client-side and bundled alongside your text." className="w-full">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
                           className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
                         >
                           <Upload className="w-4 h-4 text-violet-400" />
-                          Attach Secure File (2MB Max)
+                          Attach Secure File (700KB Max)
                         </button>
                       </Tooltip>
 
