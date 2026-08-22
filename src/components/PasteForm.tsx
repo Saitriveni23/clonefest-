@@ -185,6 +185,28 @@ export function PasteForm() {
     }
   };
 
+  const addToHistory = (item: {
+    id: string;
+    title: string;
+    type: string;
+    shareUrl: string;
+    manageUrl?: string;
+  }) => {
+    try {
+      if (typeof window === 'undefined') return;
+      const historyStr = localStorage.getItem('cipherdrop:history') || '[]';
+      const history = JSON.parse(historyStr);
+      history.unshift({
+        ...item,
+        date: new Date().toISOString(),
+      });
+      localStorage.setItem('cipherdrop:history', JSON.stringify(history.slice(0, 50)));
+      window.dispatchEvent(new Event('cipherdrop:history-change'));
+    } catch (e) {
+      console.error('Failed to save to history:', e);
+    }
+  };
+
   // Audio recording states and refs
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -526,9 +548,18 @@ export function PasteForm() {
         setDirectShareUrl(`${window.location.origin}/p/${data.id}#${keyHex}`);
         const deadManHashFragment = isDeadMan ? `&checkin=${deadManKey}` : '';
         const duressHashFragment = duressKey ? `&duress=${duressKey}` : '';
-        setDirectManageUrl(`${window.location.origin}/p/${data.id}/manage#${manageKey}${deadManHashFragment}${duressHashFragment}`);
+        const mUrl = `${window.location.origin}/p/${data.id}/manage#${manageKey}${deadManHashFragment}${duressHashFragment}`;
+        setDirectManageUrl(mUrl);
         setSuccessMode('direct');
         triggerConfetti();
+
+        addToHistory({
+          id: data.id,
+          title: title.trim() || 'Classified Text / Secrets',
+          type: selectedTask,
+          shareUrl: `${window.location.origin}/p/${data.id}#${keyHex}`,
+          manageUrl: mUrl,
+        });
 
       } else if (method === 'threshold') {
         // SSS Threshold split
@@ -567,6 +598,13 @@ export function PasteForm() {
         setSuccessMode('threshold');
         triggerConfetti();
 
+        addToHistory({
+          id: data.id,
+          title: title.trim() || 'Threshold Vault split',
+          type: 'vault',
+          shareUrl: `${window.location.origin}/p/${data.id}`,
+        });
+
       } else if (method === 'chat') {
         // Chat room creation (polls E2E)
         const keyHex = generateKey();
@@ -587,9 +625,17 @@ export function PasteForm() {
         if (!response.ok) throw new Error('Failed to create ephemeral room.');
         const data = await response.json();
 
-        setChatUrl(`${window.location.origin}/t/${data.id}#${keyHex}`);
+        const cUrl = `${window.location.origin}/t/${data.id}#${keyHex}`;
+        setChatUrl(cUrl);
         setSuccessMode('chat');
         triggerConfetti();
+
+        addToHistory({
+          id: data.id,
+          title: 'Secure Polling Chat Node',
+          type: 'chat',
+          shareUrl: cUrl,
+        });
 
       } else if (method === 'stego') {
         // Hiding ciphertext in cover image PNG
@@ -634,6 +680,13 @@ export function PasteForm() {
         setStegoPngUrl(encodedPng);
         setSuccessMode('stego');
         triggerConfetti();
+
+        addToHistory({
+          id: data.id,
+          title: title.trim() || 'Covert Stego Image',
+          type: 'stego',
+          shareUrl: targetString,
+        });
 
       } else if (method === 'slack') {
         // Slackcommand simulation
