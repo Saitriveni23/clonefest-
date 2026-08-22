@@ -1109,7 +1109,7 @@ export function PasteView({ id }: PasteViewProps) {
           <h4 className="text-sm font-semibold text-text-main">Scan to Open on Mobile Device</h4>
           <div className="p-3 bg-white rounded-xl inline-block shadow-lg">
             <img
-              src={`https://chart.googleapis.com/chart?cht=qr&chs=180&chl=${encodeURIComponent(window.location.href)}`}
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(window.location.href)}`}
               alt="QR Code Link"
               className="w-40 h-40"
             />
@@ -1143,7 +1143,7 @@ export function PasteView({ id }: PasteViewProps) {
 
             <div className="p-4 bg-white rounded-2xl inline-block shadow-xl mx-auto border-4 border-sky-500/20">
               <img
-                src={`https://chart.googleapis.com/chart?cht=qr&chs=200&chl=${encodeURIComponent(qrChunks[activeQrIndex])}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrChunks[activeQrIndex])}`}
                 alt="Blinking QR Loop Chunk"
                 className="w-48 h-48"
               />
