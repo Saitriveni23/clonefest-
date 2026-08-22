@@ -99,6 +99,10 @@ function parseThreadRow(data: Record<string, any> | null): ThreadRow | null {
   };
 }
 
+// In-memory fallbacks to enable fully functional offline/local testing when Redis credentials are not set
+const memoryPastes = new Map<string, any>();
+const memoryThreads = new Map<string, any>();
+
 export const dbHelper = {
   /**
    * Save a new encrypted paste.
@@ -122,8 +126,6 @@ export const dbHelper = {
     scan_limit?: number;
     biometric_required?: boolean;
   }): Promise<void> {
-    if (!redis) return;
-
     const createdAt = Date.now();
     const expiresAt = paste.expires_in_seconds ? createdAt + (paste.expires_in_seconds * 1000) : null;
     const checkInDue = paste.is_dead_man && paste.check_in_interval 
@@ -156,6 +158,11 @@ export const dbHelper = {
       biometric_required: paste.biometric_required ? 1 : 0,
     };
 
+    if (!redis) {
+      memoryPastes.set(paste.id, rawData);
+      return;
+    }
+
     const redisKey = `paste:${paste.id}`;
     await redis.hset(redisKey, sanitizeForRedis(rawData));
 
@@ -169,15 +176,46 @@ export const dbHelper = {
    * Retrieve a paste by ID.
    */
   async getPaste(id: string): Promise<PasteRow | null> {
-    if (!redis) return null;
+    const now = Date.now();
+
+    if (!redis) {
+      const rawData = memoryPastes.get(id);
+      if (!rawData) return null;
+
+      // Check TTL expiration
+      if (rawData.expires_at && now > rawData.expires_at) {
+        memoryPastes.delete(id);
+        return null;
+      }
+
+      // Check dead man switch countdown active
+      if (rawData.is_dead_man === 1 && rawData.check_in_due && now < rawData.check_in_due) {
+        return parsePasteRow(rawData);
+      }
+
+      const newReadAt = rawData.read_at ? rawData.read_at : now;
+      const newViewCount = rawData.view_count + 1;
+
+      const updated = {
+        ...rawData,
+        view_count: newViewCount,
+        read_at: newReadAt
+      };
+
+      if (rawData.burn_after_read === 1) {
+        memoryPastes.delete(id);
+      } else {
+        memoryPastes.set(id, updated);
+      }
+
+      return parsePasteRow(updated);
+    }
 
     const redisKey = `paste:${id}`;
     const rawData = await redis.hgetall(redisKey);
     const row = parsePasteRow(rawData);
 
     if (!row) return null;
-
-    const now = Date.now();
 
     // Check dead man switch countdown active
     if (row.is_dead_man === 1 && row.check_in_due && now < row.check_in_due) {
@@ -208,7 +246,14 @@ export const dbHelper = {
    * Fetch paste metadata safely for the sender
    */
   async getPasteMetadata(id: string): Promise<Omit<PasteRow, 'ciphertext' | 'iv'> | null> {
-    if (!redis) return null;
+    if (!redis) {
+      const rawData = memoryPastes.get(id);
+      if (!rawData) return null;
+      const row = parsePasteRow(rawData);
+      if (!row) return null;
+      const { ciphertext, iv, ...metadata } = row;
+      return metadata;
+    }
 
     const redisKey = `paste:${id}`;
     const rawData = await redis.hgetall(redisKey);
@@ -223,7 +268,20 @@ export const dbHelper = {
    * Increments the failed attempts counter.
    */
   async incrementFailedAttempts(id: string): Promise<{ failed: number; burned: boolean }> {
-    if (!redis) return { failed: 0, burned: false };
+    if (!redis) {
+      const rawData = memoryPastes.get(id);
+      if (!rawData) return { failed: 0, burned: true };
+
+      const newFailed = rawData.failed_attempts + 1;
+      if (rawData.max_attempts > 0 && newFailed >= rawData.max_attempts) {
+        memoryPastes.delete(id);
+        return { failed: newFailed, burned: true };
+      }
+
+      rawData.failed_attempts = newFailed;
+      memoryPastes.set(id, rawData);
+      return { failed: newFailed, burned: false };
+    }
 
     const redisKey = `paste:${id}`;
     const rawData = await redis.hgetall(redisKey);
@@ -244,10 +302,18 @@ export const dbHelper = {
    * Triggers a check-in for the dead man switch, resetting the countdown timer.
    */
   async checkInDeadMan(id: string, intervalSeconds: number): Promise<number> {
-    if (!redis) return Date.now();
+    const nextCheckIn = Date.now() + intervalSeconds * 1000;
+
+    if (!redis) {
+      const rawData = memoryPastes.get(id);
+      if (rawData) {
+        rawData.check_in_due = nextCheckIn;
+        memoryPastes.set(id, rawData);
+      }
+      return nextCheckIn;
+    }
 
     const redisKey = `paste:${id}`;
-    const nextCheckIn = Date.now() + intervalSeconds * 1000;
     await redis.hset(redisKey, { check_in_due: nextCheckIn });
     return nextCheckIn;
   },
@@ -256,7 +322,9 @@ export const dbHelper = {
    * Deletes a paste by ID manually.
    */
   async deletePaste(id: string): Promise<boolean> {
-    if (!redis) return false;
+    if (!redis) {
+      return memoryPastes.delete(id);
+    }
 
     const redisKey = `paste:${id}`;
     const deletedCount = await redis.del(redisKey);
@@ -267,18 +335,14 @@ export const dbHelper = {
    * Clean up all expired pastes (no-op with Redis TTL, but kept for interface compatibility)
    */
   async cleanupExpired(): Promise<number> {
-    // Redis handles TTL expiration natively
     return 0;
   },
 
   /* --- THREAD METHODS --- */
 
   async createThread(id: string, messagesJson: string, expiresInSeconds: number): Promise<void> {
-    if (!redis) return;
-
     const now = Date.now();
     const expiresAt = now + expiresInSeconds * 1000;
-    const redisKey = `thread:${id}`;
 
     const rawData = {
       id,
@@ -287,12 +351,26 @@ export const dbHelper = {
       expires_at: expiresAt,
     };
 
+    if (!redis) {
+      memoryThreads.set(id, rawData);
+      return;
+    }
+
+    const redisKey = `thread:${id}`;
     await redis.hset(redisKey, sanitizeForRedis(rawData));
     await redis.expire(redisKey, expiresInSeconds);
   },
 
   async getThread(id: string): Promise<ThreadRow | null> {
-    if (!redis) return null;
+    if (!redis) {
+      const rawData = memoryThreads.get(id);
+      if (!rawData) return null;
+      if (rawData.expires_at && Date.now() > rawData.expires_at) {
+        memoryThreads.delete(id);
+        return null;
+      }
+      return parseThreadRow(rawData);
+    }
 
     const redisKey = `thread:${id}`;
     const rawData = await redis.hgetall(redisKey);
@@ -300,7 +378,13 @@ export const dbHelper = {
   },
 
   async updateThread(id: string, messagesJson: string): Promise<boolean> {
-    if (!redis) return false;
+    if (!redis) {
+      const rawData = memoryThreads.get(id);
+      if (!rawData) return false;
+      rawData.messages_json = messagesJson;
+      memoryThreads.set(id, rawData);
+      return true;
+    }
 
     const redisKey = `thread:${id}`;
     const exists = await redis.exists(redisKey);
@@ -314,7 +398,20 @@ export const dbHelper = {
    * Increments scan_count and returns the updated row.
    */
   async incrementScanCount(id: string): Promise<{ burned: boolean; scan_count: number; scan_limit: number }> {
-    if (!redis) return { burned: false, scan_count: 0, scan_limit: 0 };
+    if (!redis) {
+      const rawData = memoryPastes.get(id);
+      if (!rawData) return { burned: false, scan_count: 0, scan_limit: 0 };
+
+      const newCount = rawData.scan_count + 1;
+      rawData.scan_count = newCount;
+      memoryPastes.set(id, rawData);
+
+      if (rawData.scan_limit > 0 && newCount >= rawData.scan_limit) {
+        memoryPastes.delete(id);
+        return { burned: true, scan_count: newCount, scan_limit: rawData.scan_limit };
+      }
+      return { burned: false, scan_count: newCount, scan_limit: rawData.scan_limit };
+    }
 
     const redisKey = `paste:${id}`;
     const rawData = await redis.hgetall(redisKey);
