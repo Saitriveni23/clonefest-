@@ -767,6 +767,16 @@ export function PasteForm() {
             </p>
           </div>
 
+          {burnAfterRead && (
+            <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/5 max-w-md mx-auto flex items-start gap-3 text-left">
+              <span className="text-rose-400 font-bold text-base mt-0.5">⚠️</span>
+              <div className="flex-1 text-[11px] leading-relaxed text-rose-300">
+                <span className="font-bold block uppercase tracking-wider mb-0.5">Burn-On-Read Active</span>
+                The recipient link will only work **EXACTLY ONCE**. If you open the link yourself, the secret note will be self-destructed and the recipient won't be able to read it.
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4 max-w-md mx-auto">
             {/* Recipient Share Link */}
             <div className="space-y-1.5 text-left">

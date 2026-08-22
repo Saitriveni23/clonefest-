@@ -119,9 +119,12 @@ export function PasteView({ id }: PasteViewProps) {
         const response = await fetch(`/api/pastes/${id}`);
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error('This paste does not exist, has expired, or was already burned.');
+            setErrorMsg('This paste does not exist, has expired, or was already burned.');
+          } else {
+            setErrorMsg('Failed to retrieve paste from server.');
           }
-          throw new Error('Failed to retrieve paste from server.');
+          setIsLoading(false);
+          return;
         }
 
         const data = await response.json();
@@ -205,8 +208,8 @@ export function PasteView({ id }: PasteViewProps) {
           setIsLoading(false);
         }
       } catch (err: any) {
-        console.error(err);
-        setErrorMsg(err.message || 'An error occurred.');
+        console.warn('Decryption or retrieve fail:', err.message);
+        setErrorMsg('An error occurred.');
         setIsLoading(false);
       }
     };

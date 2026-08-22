@@ -95,9 +95,12 @@ export default function ManagePanel({ id }: ManagePanelProps) {
         
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error('This paste no longer exists, was already self-destructed/burned, or expired.');
+            setErrorMsg('This paste no longer exists, was already self-destructed/burned, or expired.');
+          } else {
+            setErrorMsg('Failed to retrieve management details.');
           }
-          throw new Error('Failed to retrieve management details.');
+          setIsLoading(false);
+          return;
         }
 
         const data = await response.json();
@@ -106,8 +109,7 @@ export default function ManagePanel({ id }: ManagePanelProps) {
           setIsDuressActive(true);
         }
       } catch (err: any) {
-        console.error(err);
-        setErrorMsg(err.message || 'Error occurred fetching status.');
+        setErrorMsg('Error occurred fetching status.');
       } finally {
         setIsLoading(false);
       }
