@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   },
 };
 
-import { ShinchanAgent } from '@/components/ShinchanAgent';
+import { SpidermanAgent } from '@/components/SpidermanAgent';
 
 export default function RootLayout({
   children,
@@ -44,7 +44,7 @@ export default function RootLayout({
         <div className="glow-bg" />
         <div className="relative z-10 min-h-full flex flex-col">
           {children}
-          <ShinchanAgent />
+          <SpidermanAgent />
         </div>
       </body>
     </html>
