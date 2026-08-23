@@ -62,19 +62,19 @@ export function ShinchanAgent() {
   const [direction, setDirection] = useState<'right' | 'left'>('right');
   const [isWalking, setIsWalking] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [showBubble, setShowBubble] = useState(true);
+  const [showClickBubble, setShowClickBubble] = useState(false);
+  const [clickMessage, setClickMessage] = useState('');
   const [isOpenModal, setIsOpenModal] = useState(false);
   const [currentSecretIndex, setCurrentSecretIndex] = useState(0);
   const [isDancing, setIsDancing] = useState(false);
-  const [bubbleText, setBubbleText] = useState("Oho! I'm Secret Agent Shin-chan! 🤫");
 
-  const bubblePhrases = [
-    "Oho! Secret Agent Shin-chan here! 💻",
-    "Psst! Click me for classified Chocobi secrets! 🍫",
-    "Hacking into Mom's snack vault... 🍪",
-    "Action Kamen Beam! ⚡",
-    "Buri Buri Buri Buri~ 🍑",
-    "Don't worry, your secrets are safe with Shiro and me! 🐶"
+  const funnyChowMessages = [
+    "CHOW TIME! 🍫 Chocobi biscuits successfully encrypted!",
+    "Oho! You caught Secret Agent Nohara! 🕵️‍♂️",
+    "ACTION BEAM! ⚡ 99,999 Kamen Energy activated!",
+    "Buri Buri Buri Buri~ 🍑 Decrypting secret snacks!",
+    "Don't tell Mom (Misae) I'm using her laptop! 🤫",
+    "Shiro says 'Woof!' (Translation: Code is 100% secure) 🐶"
   ];
 
   // Synthesize a fun comedic beep sound using Web Audio API
@@ -88,69 +88,59 @@ export function ShinchanAgent() {
 
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
-      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.3);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.25);
 
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      osc.stop(ctx.currentTime + 0.3);
     } catch (e) {}
   };
 
-  // Roaming loop
+  // Fast Roaming loop (650ms ticker)
   useEffect(() => {
     const interval = setInterval(() => {
       if (isOpenModal) return;
 
-      // Randomly change state: walking, typing on laptop, or wiggling
       const rand = Math.random();
 
-      if (rand < 0.25) {
-        // Stop & type on laptop
+      if (rand < 0.15) {
+        // Brief typing on laptop
         setIsWalking(false);
         setIsTyping(true);
-        setBubbleText("Typing classified secret codes... 💻");
-      } else if (rand < 0.35) {
-        // Stop & dance
+      } else if (rand < 0.22) {
+        // Quick dance
         setIsWalking(false);
         setIsTyping(false);
         setIsDancing(true);
-        setBubbleText("Buri Buri Dance! 🍑✨");
-        setTimeout(() => setIsDancing(false), 2500);
+        setTimeout(() => setIsDancing(false), 1200);
       } else {
-        // Walk across bottom of screen
+        // Fast walking across screen
         setIsWalking(true);
         setIsTyping(false);
 
         setPosX((prev) => {
           const maxW = typeof window !== 'undefined' ? window.innerWidth - 120 : 800;
-          let step = 35;
+          let step = 48; // Faster, larger steps
           let nextX = direction === 'right' ? prev + step : prev - step;
 
           if (nextX > maxW) {
             setDirection('left');
-            nextX = maxW - 20;
-          } else if (nextX < 20) {
+            nextX = maxW - 30;
+          } else if (nextX < 30) {
             setDirection('right');
-            nextX = 40;
+            nextX = 50;
           }
 
           return nextX;
         });
-
-        // Rotate cute speech bubbles occasionally
-        if (Math.random() < 0.3) {
-          const nextBubble = bubblePhrases[Math.floor(Math.random() * bubblePhrases.length)];
-          setBubbleText(nextBubble);
-          setShowBubble(true);
-        }
       }
-    }, 2800);
+    }, 750);
 
     return () => clearInterval(interval);
   }, [direction, isOpenModal]);
@@ -158,14 +148,18 @@ export function ShinchanAgent() {
   const handleClickShinchan = () => {
     playFunnySound();
     confetti({
-      particleCount: 45,
-      spread: 60,
+      particleCount: 50,
+      spread: 70,
       origin: {
         x: Math.min(Math.max(posX / (typeof window !== 'undefined' ? window.innerWidth : 1000), 0.1), 0.9),
         y: 0.85
       },
-      colors: ['#ef4444', '#facc15', '#a855f7', '#38bdf8']
+      colors: ['#ef4444', '#facc15', '#a855f7', '#38bdf8', '#22c55e']
     });
+
+    const chosenChow = funnyChowMessages[Math.floor(Math.random() * funnyChowMessages.length)];
+    setClickMessage(chosenChow);
+    setShowClickBubble(true);
 
     setCurrentSecretIndex(Math.floor(Math.random() * SHINCHAN_SECRETS.length));
     setIsOpenModal(true);
@@ -174,31 +168,32 @@ export function ShinchanAgent() {
   const handleNextSecret = () => {
     playFunnySound();
     setCurrentSecretIndex((prev) => (prev + 1) % SHINCHAN_SECRETS.length);
+    const chosenChow = funnyChowMessages[Math.floor(Math.random() * funnyChowMessages.length)];
+    setClickMessage(chosenChow);
   };
 
   const secret = SHINCHAN_SECRETS[currentSecretIndex];
 
   return (
     <>
-      {/* Roaming Shinchan on Web Application Bottom */}
+      {/* Fast Roaming Shinchan */}
       <div
-        className="fixed bottom-4 z-40 transition-all duration-1000 ease-out select-none cursor-pointer group"
+        className="fixed bottom-3 z-40 transition-all duration-700 ease-linear select-none cursor-pointer group"
         style={{
           left: `${posX}px`,
           transform: direction === 'left' ? 'scaleX(-1)' : 'scaleX(1)'
         }}
         onClick={handleClickShinchan}
       >
-        {/* Floating Comic Speech Bubble (Un-mirrored) */}
-        {showBubble && (
+        {/* Floating Comic Speech Bubble (Appears only after clicking / on hover prompt) */}
+        {showClickBubble && (
           <div
-            className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 rounded-full bg-yellow-400 text-black font-extrabold text-[11px] shadow-lg border-2 border-black animate-bounce group-hover:scale-110 transition-transform pointer-events-none"
+            className="absolute -top-14 left-1/2 -translate-x-1/2 whitespace-nowrap px-3.5 py-1.5 rounded-full bg-yellow-400 text-black font-black text-xs shadow-2xl border-2 border-black animate-bounce group-hover:scale-105 transition-transform pointer-events-none"
             style={{
               transform: direction === 'left' ? 'scaleX(-1) translateX(50%)' : 'scaleX(1) translateX(-50%)'
             }}
           >
-            {bubbleText}
-            {/* Bubble arrow */}
+            {clickMessage}
             <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-yellow-400 border-r-2 border-b-2 border-black rotate-45" />
           </div>
         )}

@@ -341,10 +341,10 @@ body {
 }
 
 .animate-walk {
-  animation: shinchan-walk 0.6s infinite ease-in-out;
+  animation: shinchan-walk 0.3s infinite ease-in-out;
 }
 
 .animate-wiggle {
-  animation: shinchan-wiggle 0.4s infinite ease-in-out;
+  animation: shinchan-wiggle 0.3s infinite ease-in-out;
 }
 
