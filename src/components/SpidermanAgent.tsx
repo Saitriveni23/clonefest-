@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, X, Check, Copy, Unlock, RotateCcw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -15,17 +15,17 @@ interface Point {
 const WAYPOINTS: Point[] = [
   { x: 5, y: 8 },      // Top-Left Corner
   { x: 88, y: 8 },     // Top-Right Corner
-  { x: 88, y: 82 },    // Bottom-Right Corner
-  { x: 5, y: 82 },     // Bottom-Left Corner
+  { x: 88, y: 80 },    // Bottom-Right Corner
+  { x: 5, y: 80 },     // Bottom-Left Corner
   { x: 48, y: 10 },    // Top-Center
-  { x: 48, y: 80 }     // Bottom-Center
+  { x: 48, y: 78 }     // Bottom-Center
 ];
 
 export function SpidermanAgent() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [targetIdx, setTargetIdx] = useState(1);
   const [spideyPos, setSpideyPos] = useState<Point>(WAYPOINTS[0]);
-  const [isShootingWeb, setIsShootingWeb] = useState(false);
+  const [isWebActive, setIsWebActive] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
 
   // Decryption bubble state
@@ -42,11 +42,11 @@ export function SpidermanAgent() {
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
 
-      const bufferSize = ctx.sampleRate * 0.16;
+      const bufferSize = ctx.sampleRate * 0.18;
       const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
-        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.22));
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
       }
 
       const whiteNoise = ctx.createBufferSource();
@@ -54,19 +54,19 @@ export function SpidermanAgent() {
 
       const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(3400, ctx.currentTime);
-      filter.Q.setValueAtTime(3.5, ctx.currentTime);
+      filter.frequency.setValueAtTime(3600, ctx.currentTime);
+      filter.Q.setValueAtTime(3.8, ctx.currentTime);
 
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.16);
+      gain.gain.setValueAtTime(0.45, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
 
       whiteNoise.connect(filter);
       filter.connect(gain);
       gain.connect(ctx.destination);
 
       whiteNoise.start();
-      whiteNoise.stop(ctx.currentTime + 0.16);
+      whiteNoise.stop(ctx.currentTime + 0.18);
     } catch (e) {}
   };
 
@@ -94,7 +94,7 @@ export function SpidermanAgent() {
     } catch (e) {}
   };
 
-  // Web-Shooting & Zipping Cycle
+  // Real Web-Shooting & Zipping Cycle
   useEffect(() => {
     if (showBubble) return;
 
@@ -102,23 +102,23 @@ export function SpidermanAgent() {
       const nextTargetIdx = (currentIdx + 1) % WAYPOINTS.length;
       setTargetIdx(nextTargetIdx);
 
-      // 1. Shoot web line to target!
-      setIsShootingWeb(true);
+      // 1. Shoot realistic spider web line to target!
+      setIsWebActive(true);
       playThwipSound();
 
-      // 2. Zip Spidey to where the web was thrown!
+      // 2. Zip Spidey along the realistic web line!
       setTimeout(() => {
         setIsZipping(true);
         setSpideyPos(WAYPOINTS[nextTargetIdx]);
-      }, 550);
+      }, 600);
 
-      // 3. Arrive and land at destination point
+      // 3. Arrive, retract web, and land!
       setTimeout(() => {
-        setIsShootingWeb(false);
+        setIsWebActive(false);
         setIsZipping(false);
         setCurrentIdx(nextTargetIdx);
-      }, 1550);
-    }, 4200);
+      }, 1650);
+    }, 4500);
 
     return () => clearInterval(sequenceTimer);
   }, [currentIdx, showBubble]);
@@ -164,9 +164,17 @@ export function SpidermanAgent() {
     }
   };
 
-  // Calculate angle of web throw
-  const deltaX = currentTargetPoint.x - spideyPos.x;
-  const deltaY = currentTargetPoint.y - spideyPos.y;
+  // Calculate coordinates for realistic braided web rope
+  const x1 = spideyPos.x + 3;
+  const y1 = spideyPos.y + 4;
+  const x2 = currentTargetPoint.x + 3;
+  const y2 = currentTargetPoint.y + 4;
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2 + 2; // subtle catenary sag
+
+  const deltaX = x2 - x1;
+  const deltaY = y2 - y1;
   const angleRad = Math.atan2(deltaY, deltaX);
   const angleDeg = (angleRad * 180) / Math.PI;
 
@@ -229,13 +237,13 @@ export function SpidermanAgent() {
         </svg>
 
         {/* ======================================================================= */}
-        {/* ACTIVE THROWN WEBLINE (Shoots from Spidey to Target Point)              */}
+        {/* REALISTIC MULTI-STRAND BRAIDED SPIDER SILK ROPE & IMPACT WEB NET        */}
         {/* ======================================================================= */}
-        {isShootingWeb && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-30">
+        {isWebActive && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
             <defs>
-              <filter id="webGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
+              <filter id="silkGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
@@ -243,33 +251,74 @@ export function SpidermanAgent() {
               </filter>
             </defs>
 
-            {/* Glowing Web Line */}
-            <line
-              x1={`${spideyPos.x + 2.5}%`}
-              y1={`${spideyPos.y + 3}%`}
-              x2={`${currentTargetPoint.x + 2.5}%`}
-              y2={`${currentTargetPoint.y + 3}%`}
+            {/* 1. Main Glowing Silk Core Rope */}
+            <path
+              d={`M ${x1}% ${y1}% Q ${midX}% ${midY}% ${x2}% ${y2}%`}
               stroke="#ffffff"
-              strokeWidth="2.5"
-              filter="url(#webGlow)"
-              strokeDasharray="4 2"
-              className="animate-pulse"
+              strokeWidth="4"
+              strokeLinecap="round"
+              fill="none"
+              filter="url(#silkGlow)"
             />
 
-            {/* Web Impact Splat at Target Point */}
-            <circle
-              cx={`${currentTargetPoint.x + 2.5}%`}
-              cy={`${currentTargetPoint.y + 3}%`}
-              r="8"
-              fill="#ffffff"
-              className="animate-ping"
+            {/* 2. Braided Outer Silk Fibers (Woven wrapping strands) */}
+            <path
+              d={`M ${x1}% ${y1}% Q ${midX - 1}% ${midY - 1}% ${x2}% ${y2}%`}
+              stroke="#e9d5ff"
+              strokeWidth="2"
+              strokeDasharray="8 4"
+              fill="none"
             />
-            <circle
-              cx={`${currentTargetPoint.x + 2.5}%`}
-              cy={`${currentTargetPoint.y + 3}%`}
-              r="5"
-              fill="#c084fc"
+            <path
+              d={`M ${x1}% ${y1}% Q ${midX + 1}% ${midY + 1}% ${x2}% ${y2}%`}
+              stroke="#c084fc"
+              strokeWidth="1.5"
+              strokeDasharray="4 6"
+              fill="none"
             />
+
+            {/* 3. Whispy Spider Silk Tendrils Branching along the Rope */}
+            <path
+              d={`M ${x1 + (deltaX * 0.3)}% ${y1 + (deltaY * 0.3)}% Q ${x1 + (deltaX * 0.35)}% ${y1 + (deltaY * 0.3) - 3}% ${x1 + (deltaX * 0.42)}% ${y1 + (deltaY * 0.42)}%`}
+              stroke="#ffffff"
+              strokeWidth="1.2"
+              fill="none"
+              opacity="0.8"
+            />
+            <path
+              d={`M ${x1 + (deltaX * 0.65)}% ${y1 + (deltaY * 0.65)}% Q ${x1 + (deltaX * 0.7)}% ${y1 + (deltaY * 0.7) + 3}% ${x1 + (deltaX * 0.78)}% ${y1 + (deltaY * 0.78)}%`}
+              stroke="#ffffff"
+              strokeWidth="1.2"
+              fill="none"
+              opacity="0.8"
+            />
+
+            {/* 4. Realistic Spider Web Anchor Net / Splat at Target Point */}
+            <g transform={`translate(${x2 * (typeof window !== 'undefined' ? window.innerWidth / 100 : 12)}, ${y2 * (typeof window !== 'undefined' ? window.innerHeight / 100 : 8)})`}>
+              {/* Radial Web Strands at anchor */}
+              {Array.from({ length: 8 }).map((_, i) => {
+                const angle = (i * Math.PI) / 4;
+                const r = 28;
+                return (
+                  <line
+                    key={i}
+                    x1="0"
+                    y1="0"
+                    x2={Math.cos(angle) * r}
+                    y2={Math.sin(angle) * r}
+                    stroke="#ffffff"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    filter="url(#silkGlow)"
+                  />
+                );
+              })}
+
+              {/* Concentric Web Rings at anchor */}
+              <circle cx="0" cy="0" r="10" stroke="#ffffff" strokeWidth="1.5" fill="rgba(255,255,255,0.2)" strokeDasharray="3 2" />
+              <circle cx="0" cy="0" r="20" stroke="#c084fc" strokeWidth="1.5" fill="none" strokeDasharray="4 3" />
+              <circle cx="0" cy="0" r="4" fill="#ffffff" className="animate-ping" />
+            </g>
           </svg>
         )}
       </div>
@@ -415,14 +464,12 @@ export function SpidermanAgent() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {/* --- LEGS & BOOTS --- */}
-            {/* Left Leg (Blue Thigh & Red Boot) */}
             <path
               d="M 38 72 L 26 92 L 18 106 L 30 108 L 36 94 L 44 76 Z"
               fill="#2563eb"
               stroke="#000000"
               strokeWidth="2"
             />
-            {/* Left Red Boot */}
             <path
               d="M 26 92 L 18 106 L 30 108 L 36 94 Z"
               fill="#dc2626"
@@ -430,14 +477,12 @@ export function SpidermanAgent() {
               strokeWidth="2"
             />
 
-            {/* Right Leg (Blue Thigh & Red Boot) */}
             <path
               d="M 62 72 L 74 92 L 82 106 L 70 108 L 64 94 L 56 76 Z"
               fill="#2563eb"
               stroke="#000000"
               strokeWidth="2"
             />
-            {/* Right Red Boot */}
             <path
               d="M 74 92 L 82 106 L 70 108 L 64 94 Z"
               fill="#dc2626"
@@ -446,31 +491,26 @@ export function SpidermanAgent() {
             />
 
             {/* --- TORSO & CHEST --- */}
-            {/* Blue Side Panels */}
             <path
               d="M 32 46 L 38 74 L 62 74 L 68 46 Z"
               fill="#2563eb"
               stroke="#000000"
               strokeWidth="2"
             />
-            {/* Red Center Vest */}
             <path
               d="M 40 44 L 38 74 L 62 74 L 60 44 Z"
               fill="#dc2626"
               stroke="#000000"
               strokeWidth="2"
             />
-            {/* Chest Web Lines */}
             <line x1="50" y1="44" x2="50" y2="74" stroke="#000000" strokeWidth="1" opacity="0.6" />
             <line x1="40" y1="58" x2="60" y2="58" stroke="#000000" strokeWidth="1" opacity="0.6" />
             <line x1="42" y1="66" x2="58" y2="66" stroke="#000000" strokeWidth="1" opacity="0.6" />
 
-            {/* Chest Spider Emblem */}
             <ellipse cx="50" cy="56" rx="2.5" ry="3.5" fill="#000000" />
             <path d="M 50 54 L 43 49 M 50 56 L 42 56 M 50 58 L 44 64 M 50 54 L 57 49 M 50 56 L 58 56 M 50 58 L 56 64" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
 
             {/* --- ARMS & WEB SHOOTER WRISTS --- */}
-            {/* Left Arm (Reaching/Balancing) */}
             <path
               d="M 33 46 L 18 56 L 10 52 L 12 46 L 24 42 L 35 44 Z"
               fill="#dc2626"
@@ -478,14 +518,12 @@ export function SpidermanAgent() {
               strokeWidth="2"
             />
 
-            {/* Right Arm (Extended Web Shooter Thwip Pose) */}
             <path
               d="M 67 46 L 82 40 L 94 36 L 96 42 L 86 48 L 65 48 Z"
               fill="#dc2626"
               stroke="#000000"
               strokeWidth="2"
             />
-            {/* Web Shooter Wrist Spark */}
             <circle cx="95" cy="38" r="3" fill="#ffffff" className="animate-ping" />
 
             {/* --- HEAD & SPIDER MASK --- */}
@@ -499,20 +537,17 @@ export function SpidermanAgent() {
               strokeWidth="2.2"
             />
 
-            {/* Mask Webbing Lines */}
             <line x1="50" y1="5" x2="50" y2="45" stroke="#000000" strokeWidth="1" opacity="0.5" />
             <line x1="33" y1="25" x2="67" y2="25" stroke="#000000" strokeWidth="1" opacity="0.5" />
             <ellipse cx="50" cy="25" rx="10" ry="12" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
 
-            {/* Large Angular Spidey Eyes (White Lenses with Thick Black Border) */}
-            {/* Left Eye */}
+            {/* Large Angular Spidey Eyes */}
             <path
               d="M 46 22 Q 41 15 37 17 Q 35 24 43 32 Q 47 30 46 22 Z"
               fill="#ffffff"
               stroke="#000000"
               strokeWidth="2.5"
             />
-            {/* Right Eye */}
             <path
               d="M 54 22 Q 59 15 63 17 Q 65 24 57 32 Q 53 30 54 22 Z"
               fill="#ffffff"
