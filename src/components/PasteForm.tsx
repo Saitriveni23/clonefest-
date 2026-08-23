@@ -827,7 +827,10 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
       )}
 
       {/* Sharing Method Tabs */}
-      <div className="flex flex-wrap bg-btn-sec-bg p-1 rounded-2xl border border-panel-border gap-1">
+      <div
+        className="flex flex-wrap p-1 rounded-2xl gap-1"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(120,80,255,0.15)' }}
+      >
         {[
           { key: 'direct', label: 'Secure Inbox', icon: Share2, tooltip: 'The standard way to share a secret: one encrypted link for the recipient, plus a separate management link for you to track reads or revoke it.' },
           { key: 'threshold', label: 'Threshold Vault', icon: Users2, tooltip: 'Splits the decryption key into multiple shares. Requires several people to combine their shares before the secret can be unlocked.' },
@@ -841,11 +844,12 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
               <Link
                 href={tab.key === 'direct' ? '/' : `/${tab.key}`}
                 onClick={() => setSuccessMode(null)}
-                className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+                className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                   method === tab.key
-                    ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md'
-                    : 'text-text-muted hover:text-text-main'
+                    ? 'text-white'
+                    : 'text-[#9b9bbf] hover:text-white'
                 }`}
+                style={method === tab.key ? { background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', boxShadow: '0 4px 12px rgba(109,40,217,0.4)' } : {}}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
@@ -1139,17 +1143,28 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
 
       {/* Main Creation Form (Only shows if no successMode) */}
       {!successMode && (
-        <form onSubmit={handleSubmit} className="glass-panel rounded-2xl p-6 md:p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="rounded-2xl p-6 md:p-8 space-y-6" style={{ background: 'rgba(14,16,32,0.8)', border: '1px solid rgba(120,80,255,0.18)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
           {/* Method title and descriptions */}
-          <div className="text-left space-y-1">
-            <h3 className="text-lg font-bold text-text-main">
+          <div className="text-left space-y-1 pb-2 border-b" style={{ borderColor: 'rgba(120,80,255,0.12)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>TERMINAL</span>
+              <span className="text-[#5c5c80] text-[10px]">›</span>
+              <span className="text-[10px] text-[#5c5c80]">
+                {method === 'direct' && 'Create a new encrypted capsule'}
+                {method === 'threshold' && 'Multi-custodian threshold vault'}
+                {method === 'chat' && 'Ephemeral end-to-end chat room'}
+                {method === 'stego' && 'Steganographic covert drop'}
+                {method === 'slack' && 'Slack bot command delivery'}
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-white">
               {method === 'direct' && 'Secure Inbox (Receipts & Revoke)'}
               {method === 'threshold' && 'Threshold Governance Vault'}
               {method === 'chat' && 'Ephemeral End-to-End Chat Thread'}
               {method === 'stego' && 'Covert Steganography Drop'}
               {method === 'slack' && 'Slack Deliver Command Bot'}
             </h3>
-            <p className="text-xs text-text-muted leading-relaxed">
+            <p className="text-xs text-[#9b9bbf] leading-relaxed">
               {method === 'direct' && 'Share secure zero-knowledge paste. Includes tracking read status receipts and a Panic Revoke override key.'}
               {method === 'threshold' && 'AES Decryption Key is split into M keyholder shares using Shamir Secret Sharing. At least N keyholders must input their parts concurrently to decrypt.'}
               {method === 'chat' && 'Creates a temporary end-to-end client-encrypted conversation. Message data polls every 2s, updating on chat nodes in real time. Decrypted strictly in browser.'}
@@ -2100,12 +2115,12 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Securing Channel Data...
+                    Encrypting & Securing...
                   </>
                 ) : (
                   <>
-                    {method === 'chat' && 'Create Chat Thread Link'}
-                    {method !== 'chat' && 'Securely Create Paste'}
+                    {method === 'chat' && 'Create Chat Thread'}
+                    {method !== 'chat' && 'Generate Capsule'}
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}

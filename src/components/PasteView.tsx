@@ -6,7 +6,7 @@ import { reconstructKey } from '@/lib/sss';
 import { 
   Lock, Unlock, Clock, FileText, Calendar,
   Trash2, Download, Copy, Check, QrCode, ShieldCheck,
-  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu
+  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu, Flame
 } from 'lucide-react';
 import { Toast, ToastType } from './Toast';
 import { Tooltip } from './Tooltip';
@@ -1174,21 +1174,69 @@ export function PasteView({ id }: PasteViewProps) {
         />
       )}
 
-      {/* Warning banner for burn after read */}
+      {/* Viewing Capsule Header & Circular Countdown Banner for burn after read */}
       {burnAfterRead && (
-        <div className="glass-panel border-rose-500/30 bg-rose-500/10 px-4 py-3 rounded flex items-center gap-3 text-left">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 animate-bounce" />
-          <span className="text-xs font-mono font-semibold text-rose-300 uppercase tracking-wide flex-1">
-            {burnCountdown !== null && burnCountdown > 0 ? (
-              <span className="flex items-center gap-2">
-                🚨 SECURE DECRYPTION INITIATED: Self-Destruct in <strong className="text-white text-sm bg-rose-600 px-2 py-0.5 rounded animate-pulse">{burnCountdown}s</strong>! Copy now!
+        <div
+          className="glass-panel-elevated rounded-3xl p-6 sm:p-8 text-center space-y-6 border border-rose-500/30"
+          style={{ background: 'rgba(14, 16, 32, 0.95)', boxShadow: '0 8px 40px rgba(244, 63, 94, 0.15)' }}
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2">
+              <span className="text-rose-400 font-bold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
+                VIEWING CAPSULE
               </span>
-            ) : burnCountdown === 0 ? (
-              <span>🔥 INITIATING MOLECULAR VAPORIZATION PURGE PROTOCOL...</span>
-            ) : (
-              <span>Self-Destruct Sequence Initiated: Data Will Be Vaporized Upon Closing This Session.</span>
-            )}
-          </span>
+            </div>
+            <span className="text-[11px] text-[#5c5c80]">This capsule will self-destruct after reading</span>
+          </div>
+
+          {/* Circular Countdown Gauge */}
+          <div className="flex flex-col items-center justify-center py-2">
+            <div className="relative w-36 h-36 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="50"
+                  fill="none"
+                  stroke="rgba(120, 80, 255, 0.15)"
+                  strokeWidth="6"
+                />
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="50"
+                  fill="none"
+                  stroke="#a855f7"
+                  strokeWidth="6"
+                  strokeDasharray={314.159}
+                  strokeDashoffset={314.159 * (1 - (burnCountdown !== null ? burnCountdown / 10 : 1))}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 1s linear' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center leading-tight">
+                <span className="text-2xl font-black font-mono text-white tracking-wider">
+                  00:{burnCountdown !== null && burnCountdown < 10 ? `0${burnCountdown}` : burnCountdown ?? '10'}
+                </span>
+                <span className="text-[10px] text-[#9b9bbf] mt-0.5">Time remaining</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Decryption Progress Bar */}
+          <div className="space-y-1.5 max-w-md mx-auto text-left">
+            <div className="flex justify-between text-xs font-semibold text-purple-300 font-mono">
+              <span>Decrypting locally...</span>
+              <span>100%</span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-black/60 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-teal-400 w-full" />
+            </div>
+            <p className="text-[10px] text-[#5c5c80] text-center pt-1">
+              This content will be destroyed automatically.
+            </p>
+          </div>
         </div>
       )}
 

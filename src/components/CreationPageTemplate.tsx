@@ -1,154 +1,1597 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from '@/components/Header';
-import { PasteForm } from '@/components/PasteForm';
-import { ShieldAlert, KeyRound, Flame, EyeOff, Radio, PenLine, SlidersHorizontal, Link2 } from 'lucide-react';
+import { encryptData, generateKey } from '@/lib/crypto';
+import { splitKey } from '@/lib/sss';
+import {
+  ShieldCheck, Lock, Unlock, KeyRound, Flame, EyeOff, Radio,
+  PenLine, SlidersHorizontal, Link2, ChevronRight, Copy, Check,
+  QrCode, ArrowRight, ShieldAlert, FileText, Code, Upload, X,
+  Trash2, Search, MoreHorizontal, Clock, RefreshCw, AlertTriangle,
+  Mic, Square, Volume2, Bot, Sparkles, ExternalLink, Terminal as TerminalIcon
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { Toast, ToastType } from './Toast';
+import { Tooltip } from './Tooltip';
 
 interface CreationPageTemplateProps {
-  defaultMethod: 'direct' | 'threshold' | 'chat' | 'stego' | 'slack';
+  defaultMethod?: 'direct' | 'threshold' | 'chat' | 'stego' | 'slack';
 }
 
-export function CreationPageTemplate({ defaultMethod }: CreationPageTemplateProps) {
+interface FileAttachment {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+}
+
+interface ArchiveItem {
+  id: string;
+  code: string;
+  title: string;
+  type: string;
+  status: 'active' | 'viewed' | 'destroyed';
+  shareUrl: string;
+  manageUrl?: string;
+  date: string;
+  expiryText: string;
+  protectionText: string;
+}
+
+async function hashSha256(text: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(text);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageTemplateProps) {
+  const [activeTab, setActiveTab] = useState<'landing' | 'terminal' | 'archive' | 'settings'>('landing');
+
+  // Terminal mode: Text vs File vs Code
+  const [inputMode, setInputMode] = useState<'text' | 'file' | 'code'>('text');
+
+  // Input states
+  const [text, setText] = useState('');
+  const [title, setTitle] = useState('');
+  const [codeLanguage, setCodeLanguage] = useState('javascript');
+  const [file, setFile] = useState<FileAttachment | null>(null);
+
+  // Protections
+  const [passwordProtection, setPasswordProtection] = useState(false);
+  const [password, setPassword] = useState('');
+  const [burnAfterReading, setBurnAfterReading] = useState(true);
+  const [expiryOption, setExpiryOption] = useState('600'); // 10 minutes default
+  const [paranoidMode, setParanoidMode] = useState(false);
+
+  // Sketchpad state
+  const [showSketchpad, setShowSketchpad] = useState(false);
+  const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+
+  // System Log state
+  const [logs, setLogs] = useState<string[]>([
+    '> welcome to cipherdrop terminal',
+    '> all encryption happens in your browser',
+    '> nothing is sent in plaintext',
+    "> type 'help' to see commands"
+  ]);
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Capsule Created Success State
+  const [createdCapsule, setCreatedCapsule] = useState<{
+    id: string;
+    code: string;
+    shareUrl: string;
+    manageUrl?: string;
+    expiryText: string;
+    protectionText: string;
+    isShamir?: boolean;
+    shares?: string[];
+  } | null>(null);
+
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Archive items state
+  const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
+  const [archiveFilter, setArchiveFilter] = useState<'active' | 'viewed' | 'destroyed'>('active');
+  const [archiveSearch, setArchiveSearch] = useState('');
+
+  // Settings
+  const [defaultExpirySetting, setDefaultExpirySetting] = useState('600');
+  const [autoCopySetting, setAutoCopySetting] = useState(true);
+  const [scanlinesSetting, setScanlinesSetting] = useState(false);
+
+  // Load Archive from local storage
+  const loadArchive = () => {
+    try {
+      const stored = localStorage.getItem('cipherdrop:history');
+      if (stored) {
+        setArchiveItems(JSON.parse(stored));
+      } else {
+        // Initial demo seed if empty
+        const initialSeeds: ArchiveItem[] = [
+          {
+            id: '7F91A2B3',
+            code: 'CD-7F91A2B3',
+            title: 'Project Credentials',
+            type: 'text',
+            status: 'active',
+            shareUrl: '#',
+            date: new Date().toISOString(),
+            expiryText: '10m remaining',
+            protectionText: 'Burn after read'
+          },
+          {
+            id: 'B482E19A',
+            code: 'CD-B482E19A',
+            title: 'API Keys Backup',
+            type: 'code',
+            status: 'active',
+            shareUrl: '#',
+            date: new Date(Date.now() - 3600000).toISOString(),
+            expiryText: '2h remaining',
+            protectionText: 'Password protected'
+          },
+          {
+            id: 'C912D830',
+            code: 'CD-C912D830',
+            title: 'Private Notes',
+            type: 'text',
+            status: 'viewed',
+            shareUrl: '#',
+            date: new Date(Date.now() - 7200000).toISOString(),
+            expiryText: 'Viewed just now',
+            protectionText: 'Burn after read'
+          },
+          {
+            id: 'A19349FA',
+            code: 'CD-A19349FA',
+            title: 'Old Config',
+            type: 'file',
+            status: 'destroyed',
+            shareUrl: '#',
+            date: new Date(Date.now() - 86400000).toISOString(),
+            expiryText: 'Destroyed after reading',
+            protectionText: 'Zero Knowledge'
+          }
+        ];
+        setArchiveItems(initialSeeds);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadArchive();
+  }, []);
+
+  // Append system log
+  const addLog = (line: string) => {
+    setLogs(prev => [...prev, line]);
+    setTimeout(() => {
+      if (logContainerRef.current) {
+        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      }
+    }, 50);
+  };
+
+  // Handle live logs on inputs
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setText(val);
+    if (val.length % 25 === 0 && val.length > 0) {
+      addLog(`> payload buffer: ${val.length} chars (markdown encoded)`);
+    }
+  };
+
+  // Calculate dynamic security score (0 - 100)
+  const calculateSecurityScore = () => {
+    let score = 50; // Base for client AES-256-GCM + Zero-knowledge
+    if (passwordProtection) score += 20;
+    if (burnAfterReading) score += 15;
+    if (expiryOption === '300' || expiryOption === '600') score += 9;
+    else if (expiryOption === '3600') score += 5;
+    if (paranoidMode) score = 100;
+    return Math.min(score, 100);
+  };
+
+  const securityScore = calculateSecurityScore();
+
+  // Handle Capsule Generation
+  const handleGenerateCapsule = async () => {
+    if (!text.trim() && !file && !sketchDataUrl) {
+      setToast({ message: 'Please write a secret, attach a file, or create a sketch.', type: 'error' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    addLog('> create capsule');
+    addLog('  Initializing...');
+
+    try {
+      // Simulate/Trigger terminal cryptographic step logs
+      await new Promise(r => setTimeout(r, 120));
+      addLog('  ✓ AES-256-GCM');
+      const keyHex = generateKey();
+      
+      await new Promise(r => setTimeout(r, 120));
+      addLog('  ✓ Key generated');
+      const manageKey = generateKey();
+      const manageKeyHash = await hashSha256(manageKey);
+
+      await new Promise(r => setTimeout(r, 120));
+      addLog('  ✓ Secure random IV');
+
+      const payload = {
+        verification: 'cipherdrop-verify',
+        title: title.trim() || 'Encrypted Secret Capsule',
+        text: text,
+        format: inputMode === 'code' ? 'code' : 'plaintext',
+        language: inputMode === 'code' ? codeLanguage : 'plaintext',
+        file: file,
+        sketch: sketchDataUrl
+      };
+
+      await new Promise(r => setTimeout(r, 150));
+      addLog('  ✓ Client-side encryption');
+
+      const { ciphertext, iv } = await encryptData(
+        JSON.stringify(payload),
+        keyHex,
+        passwordProtection ? password : undefined
+      );
+
+      let shares: string[] = [];
+      if (paranoidMode) {
+        shares = splitKey(keyHex, 2, 3);
+        addLog('  ✓ Shamir (2-of-3) key split complete');
+      }
+
+      // Upload to server
+      const expiresSec = expiryOption === 'never' ? null : parseInt(expiryOption, 10);
+      const res = await fetch('/api/pastes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ciphertext,
+          iv,
+          password_protected: passwordProtection,
+          burn_after_read: burnAfterReading,
+          expires_in_seconds: expiresSec,
+          manage_key_hash: manageKeyHash
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Server storage failed.');
+      }
+
+      const data = await res.json();
+      const capsuleId = data.id;
+      const capsuleCode = `CD-${capsuleId.substring(0, 8).toUpperCase()}`;
+
+      addLog('  ✓ Capsule ready');
+      addLog(`> dispatch node: ${capsuleCode}`);
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const shareUrl = paranoidMode
+        ? `${origin}/cd/${capsuleId}#${shares[0]}`
+        : `${origin}/cd/${capsuleId}#${keyHex}`;
+      const manageUrl = `${origin}/cd/${capsuleId}?manage=${manageKey}`;
+
+      const protectionSummary = [
+        passwordProtection ? 'Password' : null,
+        burnAfterReading ? 'Burn After Read' : null,
+        paranoidMode ? 'Shamir Vault' : null
+      ].filter(Boolean).join(' • ') || 'Zero-Knowledge';
+
+      const expiryLabels: Record<string, string> = {
+        '300': '5 minutes',
+        '600': '10 minutes',
+        '3600': '1 hour',
+        '86400': '1 day',
+        '604800': '1 week',
+        'never': 'Never'
+      };
+      const expiryText = expiryLabels[expiryOption] || '10 minutes';
+
+      const newCapsule = {
+        id: capsuleId,
+        code: capsuleCode,
+        shareUrl,
+        manageUrl,
+        expiryText,
+        protectionText: protectionSummary,
+        isShamir: paranoidMode,
+        shares
+      };
+
+      setCreatedCapsule(newCapsule);
+
+      // Save to local archive
+      const newArchiveItem: ArchiveItem = {
+        id: capsuleId,
+        code: capsuleCode,
+        title: title.trim() || 'Encrypted Secret Capsule',
+        type: inputMode,
+        status: 'active',
+        shareUrl,
+        manageUrl,
+        date: new Date().toISOString(),
+        expiryText: `${expiryText} remaining`,
+        protectionText: protectionSummary
+      };
+
+      const updatedArchive = [newArchiveItem, ...archiveItems.filter(i => i.id !== capsuleId)];
+      setArchiveItems(updatedArchive);
+      try {
+        localStorage.setItem('cipherdrop:history', JSON.stringify(updatedArchive));
+      } catch (e) {}
+
+      // Auto copy
+      if (autoCopySetting) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          setToast({ message: 'Capsule created & link copied to clipboard!', type: 'success' });
+        } catch (e) {
+          setToast({ message: 'Capsule created successfully!', type: 'success' });
+        }
+      } else {
+        setToast({ message: 'Capsule created successfully!', type: 'success' });
+      }
+
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    } catch (err: any) {
+      console.error(err);
+      addLog(`> ERROR: ${err.message || 'Encryption failed'}`);
+      setToast({ message: err.message || 'Failed to create capsule', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Reset form
+  const handleResetForm = () => {
+    setText('');
+    setTitle('');
+    setFile(null);
+    setSketchDataUrl(null);
+    setPassword('');
+    setPasswordProtection(false);
+    setBurnAfterReading(true);
+    setParanoidMode(false);
+    setCreatedCapsule(null);
+    setLogs([
+      '> welcome to cipherdrop terminal',
+      '> all encryption happens in your browser',
+      '> nothing is sent in plaintext',
+      "> type 'help' to see commands",
+      '> system ready for new secret payload'
+    ]);
+  };
+
+  // File Upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploaded = e.target.files?.[0];
+    if (!uploaded) return;
+    if (uploaded.size > 700 * 1024) {
+      setToast({ message: 'File must be under 700KB.', type: 'error' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFile({
+        name: uploaded.name,
+        type: uploaded.type || 'application/octet-stream',
+        size: uploaded.size,
+        data: reader.result as string
+      });
+      addLog(`> attached file: ${uploaded.name} (${(uploaded.size / 1024).toFixed(1)} KB)`);
+      setToast({ message: `File "${uploaded.name}" attached.`, type: 'success' });
+    };
+    reader.readAsDataURL(uploaded);
+  };
+
+  // Voice recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          setFile({
+            name: 'classified_voice_note.webm',
+            type: 'audio/webm',
+            size: audioBlob.size,
+            data: reader.result as string
+          });
+          addLog('> attached audio: classified_voice_note.webm');
+          setToast({ message: 'Voice recording saved!', type: 'success' });
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => setRecordingDuration(d => d + 1), 1000);
+      addLog('> audio recording started...');
+    } catch (err) {
+      setToast({ message: 'Microphone access denied.', type: 'error' });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    }
+  };
+
+  // Canvas drawing
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#c084fc';
+    setIsDrawing(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      setSketchDataUrl(canvas.toDataURL());
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSketchDataUrl(null);
+  };
+
   return (
-    <div className="flex flex-col min-h-screen scanlines bg-[#05070a] text-zinc-300 font-mono">
-      <Header />
+    <div className="flex flex-col min-h-screen bg-[#0a0b14] text-[#f0f0ff] font-sans selection:bg-purple-600/40">
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
 
-      {/* Main content body */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16">
+      {/* Header */}
+      <Header
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          setCreatedCapsule(null);
+        }}
+      />
 
-        {/* Tactical Agency Hero Section */}
-        <section className="text-center max-w-2xl mx-auto space-y-4 mb-10">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-[1.1] font-sans">
-            Cryptographic Intelligence Portal
-          </h1>
-          <p className="text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
-            Deploy encrypted payloads with absolute deniability. Zero-knowledge architecture guarantees your intel remains classified until decryption.
-          </p>
-          <p className="text-xs text-zinc-500 max-w-lg mx-auto leading-relaxed font-sans">
-            In plain terms: CipherDrop is a secure pastebin. Write a note or upload a file below, it gets encrypted <span className="text-teal-400">in your browser</span> before it ever leaves your device, and you get a link to share. Only someone with that exact link can decrypt it — not even our server can read it.
-          </p>
-        </section>
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
 
-        {/* How It Works Guide */}
-        <section className="mb-12">
-          <h2 className="text-center text-[10px] font-bold text-text-ghost uppercase tracking-[0.2em] mb-5">How It Works</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="glass-panel rounded-xl p-5 text-left space-y-2 relative">
-              <span className="absolute top-4 right-4 text-2xl font-black text-white/5">1</span>
-              <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center border border-violet-500/20">
-                <PenLine className="w-4 h-4 text-violet-400" />
+        {/* ========================================================= */}
+        {/* LANDING PAGE VIEW (Matching Screenshot 1 & 2)             */}
+        {/* ========================================================= */}
+        {activeTab === 'landing' && (
+          <div className="space-y-20 sm:space-y-28 py-6 sm:py-12 animate-slide-up">
+            {/* Hero Section */}
+            <section className="text-center space-y-6 max-w-3xl mx-auto">
+              <div
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide"
+                style={{
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  color: '#c084fc',
+                  boxShadow: '0 0 20px rgba(139, 92, 246, 0.2)'
+                }}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Zero-knowledge encrypted capsules</span>
               </div>
-              <h3 className="text-sm font-bold text-text-main">Write your secret</h3>
-              <p className="text-[11px] text-text-ghost leading-relaxed">
-                Type text or code, attach a file, record a voice note, or draw a sketch in the form below.
+
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.08]">
+                Drop a secret.<br />
+                <span className="text-gradient-vivid">Only they can open it.</span>
+              </h1>
+
+              <p className="text-sm sm:text-base text-[#9b9bbf] leading-relaxed max-w-xl mx-auto">
+                CipherDrop encrypts your text, code, or files right in your browser before anything is sent anywhere.
+                We never see the plaintext — not even for a second.
               </p>
+
+              <div className="pt-2 flex flex-col items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('terminal')}
+                  className="btn-primary px-8 py-4 rounded-xl text-base font-bold flex items-center gap-3 shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)',
+                    boxShadow: '0 8px 32px rgba(124, 58, 237, 0.5)'
+                  }}
+                >
+                  <span>Open the Terminal</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+
+                <a
+                  href="#how-it-works"
+                  className="text-xs font-medium text-[#5c5c80] hover:text-[#9b9bbf] flex flex-col items-center gap-1 transition-colors mt-2"
+                >
+                  <span>Scroll to see how it works</span>
+                  <span className="text-base animate-bounce">↓</span>
+                </a>
+              </div>
+            </section>
+
+            {/* How It Works Section */}
+            <section id="how-it-works" className="space-y-6 max-w-5xl mx-auto pt-6">
+              <h2 className="section-label text-center">How It Works</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    icon: PenLine,
+                    label: 'Write',
+                    desc: 'Write your secret or upload a file.',
+                    color: 'text-purple-400',
+                    bg: 'rgba(139, 92, 246, 0.1)'
+                  },
+                  {
+                    icon: SlidersHorizontal,
+                    label: 'Protect',
+                    desc: 'Add password, set expiry, and extra protections.',
+                    color: 'text-blue-400',
+                    bg: 'rgba(59, 130, 246, 0.1)'
+                  },
+                  {
+                    icon: Link2,
+                    label: 'Share',
+                    desc: 'Get a link or QR code and share it securely.',
+                    color: 'text-teal-400',
+                    bg: 'rgba(45, 212, 191, 0.1)'
+                  },
+                  {
+                    icon: Flame,
+                    label: 'Decrypt',
+                    desc: 'They open it, decrypt locally, and it\'s gone.',
+                    color: 'text-rose-400',
+                    bg: 'rgba(244, 63, 94, 0.1)'
+                  }
+                ].map((step, idx) => (
+                  <div
+                    key={step.label}
+                    className="glass-panel rounded-2xl p-6 text-left space-y-3 relative overflow-hidden group hover:border-purple-500/30 transition-all"
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center border border-white/5"
+                      style={{ background: step.bg }}
+                    >
+                      <step.icon className={`w-5 h-5 ${step.color}`} />
+                    </div>
+                    <h3 className="text-base font-bold text-white">{step.label}</h3>
+                    <p className="text-xs text-[#9b9bbf] leading-relaxed">{step.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Zero-Knowledge Architecture Section */}
+            <section className="glass-panel-elevated rounded-3xl p-6 sm:p-10 space-y-8 max-w-5xl mx-auto border border-purple-500/20">
+              <h2 className="section-label text-center">Zero-Knowledge Architecture</h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                {/* Node 1: Browser */}
+                <div
+                  className="rounded-2xl p-6 space-y-3 text-center border"
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.06)',
+                    borderColor: 'rgba(139, 92, 246, 0.2)'
+                  }}
+                >
+                  <p className="text-xs font-bold text-white uppercase tracking-wider">YOUR BROWSER</p>
+                  <div className="space-y-1.5 text-xs text-[#9b9bbf]">
+                    <p className="flex items-center justify-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-purple-400" /> Encrypts
+                    </p>
+                    <p className="flex items-center justify-center gap-1.5">
+                      <Unlock className="w-3.5 h-3.5 text-purple-400" /> Decrypts
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <span className="badge badge-active">🛡️ Zero Knowledge</span>
+                  </div>
+                </div>
+
+                {/* Node 2: Server */}
+                <div
+                  className="rounded-2xl p-6 space-y-3 text-center border relative"
+                  style={{
+                    background: 'rgba(10, 11, 20, 0.95)',
+                    borderColor: 'rgba(120, 80, 255, 0.3)',
+                    boxShadow: '0 0 30px rgba(124, 58, 237, 0.15)'
+                  }}
+                >
+                  <p className="text-xs font-bold text-white uppercase tracking-wider">CIPHERDROP SERVER</p>
+                  <p className="text-xs text-[#9b9bbf]">Stores only encrypted data</p>
+                  <div className="w-9 h-9 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto text-purple-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                </div>
+
+                {/* Node 3: Recipient */}
+                <div
+                  className="rounded-2xl p-6 space-y-3 text-center border"
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.06)',
+                    borderColor: 'rgba(139, 92, 246, 0.2)'
+                  }}
+                >
+                  <p className="text-xs font-bold text-white uppercase tracking-wider">RECIPIENT BROWSER</p>
+                  <div className="space-y-1.5 text-xs text-[#9b9bbf]">
+                    <p className="flex items-center justify-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-teal-400" /> Encrypts
+                    </p>
+                    <p className="flex items-center justify-center gap-1.5">
+                      <Unlock className="w-3.5 h-3.5 text-teal-400" /> Decrypts Locally
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <span className="badge badge-active">🛡️ Zero Knowledge</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-2">
+                <span
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-white tracking-wide"
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    border: '1px solid rgba(139, 92, 246, 0.35)'
+                  }}
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  We never see your plaintext. Ever.
+                </span>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TERMINAL VIEW (Matching Screenshot 3)                     */}
+        {/* ========================================================= */}
+        {activeTab === 'terminal' && (
+          <div className="space-y-6 animate-slide-up">
+            {/* Header row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4" style={{ borderColor: 'rgba(120, 80, 255, 0.12)' }}>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight uppercase">TERMINAL</h1>
+                <p className="text-xs text-[#9b9bbf] mt-0.5">Create a new encrypted capsule</p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('archive')}
+                  className="btn-ghost px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Recent</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetForm}
+                  className="btn-ghost px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-teal-400" />
+                  <span>+ New</span>
+                </button>
+              </div>
             </div>
 
-            <div className="glass-panel rounded-xl p-5 text-left space-y-2 relative">
-              <span className="absolute top-4 right-4 text-2xl font-black text-white/5">2</span>
-              <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center border border-teal-500/20">
-                <SlidersHorizontal className="w-4 h-4 text-teal-400" />
-              </div>
-              <h3 className="text-sm font-bold text-text-main">Choose protection</h3>
-              <p className="text-[11px] text-text-ghost leading-relaxed">
-                Optionally set an expiry time, a password, or &quot;Burn After Reading&quot; so it self-destructs after one view.
-              </p>
-            </div>
+            {/* CAPSULE CREATED POPUP / CARD */}
+            {createdCapsule && (
+              <div
+                className="glass-panel-elevated rounded-3xl p-6 sm:p-8 text-center space-y-6 border border-purple-500/40 animate-scale-in"
+                style={{ background: 'rgba(14, 16, 32, 0.95)', boxShadow: '0 12px 60px rgba(124, 58, 237, 0.35)' }}
+              >
+                <div className="w-14 h-14 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center mx-auto text-purple-300">
+                  <Check className="w-7 h-7" />
+                </div>
 
-            <div className="glass-panel rounded-xl p-5 text-left space-y-2 relative">
-              <span className="absolute top-4 right-4 text-2xl font-black text-white/5">3</span>
-              <div className="w-9 h-9 rounded-lg bg-sky-500/10 flex items-center justify-center border border-sky-500/20">
-                <Link2 className="w-4 h-4 text-sky-400" />
-              </div>
-              <h3 className="text-sm font-bold text-text-main">Share the link</h3>
-              <p className="text-[11px] text-text-ghost leading-relaxed">
-                Hit &quot;Securely Create Paste&quot; and send the generated link to whoever needs to read it.
-              </p>
-            </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-black tracking-wider text-white uppercase">CAPSULE CREATED</h2>
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-300 font-mono text-sm font-bold">
+                    <span>{createdCapsule.code}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(createdCapsule.code);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="hover:text-white cursor-pointer"
+                    >
+                      {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
 
-            <div className="glass-panel rounded-xl p-5 text-left space-y-2 relative">
-              <span className="absolute top-4 right-4 text-2xl font-black text-white/5">4</span>
-              <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
-                <Flame className="w-4 h-4 text-rose-400" />
+                {/* Share Link Row */}
+                <div className="max-w-xl mx-auto space-y-2 text-left">
+                  <span className="text-[11px] font-bold text-[#9b9bbf]">Share your capsule</span>
+                  <div className="flex bg-black/40 border border-purple-500/30 rounded-xl p-1.5 items-center justify-between gap-2">
+                    <input
+                      readOnly
+                      value={createdCapsule.shareUrl}
+                      className="bg-transparent text-xs text-teal-300 font-mono px-2 py-1 outline-none w-full truncate select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(createdCapsule.shareUrl);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                        setToast({ message: 'Capsule link copied!', type: 'success' });
+                      }}
+                      className="btn-primary px-4 py-2 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1"
+                    >
+                      {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowQrModal(true)}
+                    className="btn-ghost px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2"
+                  >
+                    <QrCode className="w-4 h-4 text-purple-400" />
+                    <span>Show QR Code</span>
+                  </button>
+
+                  <a
+                    href={createdCapsule.shareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-ghost px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 hover:text-white"
+                  >
+                    <ExternalLink className="w-4 h-4 text-teal-400" />
+                    <span>Open Decryption Page</span>
+                  </a>
+                </div>
+
+                {/* Metadata Row */}
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl text-xs text-[#9b9bbf] max-w-xl mx-auto border"
+                  style={{ background: 'rgba(255, 255, 255, 0.02)', borderColor: 'rgba(120, 80, 255, 0.15)' }}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Expiry: {createdCapsule.expiryText}</span>
+                  </div>
+                  <div className="flex items-center gap-2 justify-center">
+                    <Lock className="w-3.5 h-3.5 text-teal-400" />
+                    <span className="truncate">{createdCapsule.protectionText}</span>
+                  </div>
+                  <div className="flex items-center gap-2 justify-center">
+                    <Clock className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Created: Just now</span>
+                  </div>
+                </div>
+
+                {/* Warning callout */}
+                {passwordProtection && (
+                  <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 max-w-xl mx-auto flex items-center justify-between gap-4 text-left">
+                    <div className="flex items-center gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <div className="text-xs text-amber-200">
+                        <strong className="block font-bold">Save your password</strong>
+                        <span className="text-[11px] text-amber-300/80">We can&apos;t recover it for you.</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setToast({ message: 'Acknowledged.', type: 'info' })}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold cursor-pointer"
+                    >
+                      I Understand
+                    </button>
+                  </div>
+                )}
               </div>
-              <h3 className="text-sm font-bold text-text-main">They open & decrypt</h3>
-              <p className="text-[11px] text-text-ghost leading-relaxed">
-                The recipient&apos;s browser decrypts it locally. If you enabled burn-after-read, it&apos;s then wiped forever.
-              </p>
+            )}
+
+            {/* 3-COLUMN MAIN TERMINAL LAYOUT */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+              {/* -------------------------------------------------- */}
+              {/* COLUMN 1 (LEFT): SYSTEM_LOG Terminal (4 cols)      */}
+              {/* -------------------------------------------------- */}
+              <div className="lg:col-span-4 flex flex-col glass-panel-elevated rounded-2xl overflow-hidden border border-purple-500/20">
+                {/* Title Bar */}
+                <div
+                  className="px-4 py-3 flex items-center justify-between border-b"
+                  style={{ background: 'rgba(10, 11, 20, 0.8)', borderColor: 'rgba(120, 80, 255, 0.15)' }}
+                >
+                  <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-300">
+                    <TerminalIcon className="w-3.5 h-3.5 text-purple-400" />
+                    <span>SYSTEM_LOG</span>
+                  </div>
+
+                  {/* macOS dots */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                  </div>
+                </div>
+
+                {/* Console Log Body */}
+                <div
+                  ref={logContainerRef}
+                  className="p-4 font-mono text-xs text-left overflow-y-auto space-y-1.5 flex-1 min-h-[320px] max-h-[480px] bg-black/60 select-text"
+                >
+                  {logs.map((line, idx) => {
+                    const isSuccess = line.includes('✓') || line.includes('READY');
+                    const isError = line.includes('ERROR');
+                    const isPrompt = line.startsWith('>');
+                    return (
+                      <p
+                        key={idx}
+                        className={`leading-relaxed ${
+                          isSuccess
+                            ? 'text-emerald-400'
+                            : isError
+                            ? 'text-rose-400'
+                            : isPrompt
+                            ? 'text-[#c084fc]'
+                            : 'text-[#9b9bbf]'
+                        }`}
+                      >
+                        {line}
+                      </p>
+                    );
+                  })}
+                  <p className="text-[#5c5c80] flex items-center gap-1">
+                    <span>&gt;</span>
+                    <span className="w-2 h-3.5 bg-purple-400 inline-block cursor-blink" />
+                  </p>
+                </div>
+
+                {/* Status footer */}
+                <div
+                  className="px-4 py-2.5 flex items-center justify-between text-[11px] font-mono border-t"
+                  style={{ background: 'rgba(10, 11, 20, 0.9)', borderColor: 'rgba(120, 80, 255, 0.15)' }}
+                >
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    STATUS: READY
+                  </span>
+                  <span className="text-[#5c5c80] uppercase tracking-wider">LOCAL_ENV</span>
+                </div>
+              </div>
+
+              {/* -------------------------------------------------- */}
+              {/* COLUMN 2 (MIDDLE): Capsule Composer (5 cols)       */}
+              {/* -------------------------------------------------- */}
+              <div className="lg:col-span-5 space-y-5">
+                <div
+                  className="glass-panel rounded-2xl p-5 sm:p-6 space-y-5 border border-purple-500/20"
+                  style={{ background: 'rgba(14, 16, 32, 0.85)' }}
+                >
+                  {/* Mode Selector Tabs */}
+                  <div
+                    className="flex p-1 rounded-xl gap-1 border"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(120, 80, 255, 0.15)' }}
+                  >
+                    {[
+                      { id: 'text', label: 'Text', icon: FileText },
+                      { id: 'file', label: 'File', icon: Upload },
+                      { id: 'code', label: 'Code', icon: Code }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setInputMode(tab.id as any);
+                          addLog(`> switched input mode to: [${tab.label.toUpperCase()}]`);
+                        }}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          inputMode === tab.id
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                            : 'text-[#9b9bbf] hover:text-white'
+                        }`}
+                      >
+                        <tab.icon className="w-3.5 h-3.5" />
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Optional Title */}
+                  <div className="space-y-1 text-left">
+                    <input
+                      type="text"
+                      placeholder="Title or Reference (Optional)"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      className="w-full glass-input px-3.5 py-2 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  {/* Input Mode: TEXT */}
+                  {inputMode === 'text' && (
+                    <div className="space-y-2 text-left">
+                      <div className="relative rounded-xl overflow-hidden border border-purple-500/20 bg-black/40">
+                        <textarea
+                          rows={6}
+                          placeholder="Type your secret here..."
+                          value={text}
+                          onChange={handleTextChange}
+                          className="w-full p-3.5 text-xs text-[#f0f0ff] bg-transparent outline-none resize-none placeholder:text-[#5c5c80] font-sans"
+                        />
+                        {/* Formatting toolbar bar */}
+                        <div className="px-3 py-2 bg-black/60 border-t border-white/5 flex items-center justify-between text-[11px] text-[#5c5c80]">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setText(t => t + ' **bold** ')}
+                              className="font-bold hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                              title="Bold"
+                            >
+                              B
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setText(t => t + ' *italic* ')}
+                              className="italic hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                              title="Italic"
+                            >
+                              I
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setText(t => t + '\n- Item ')}
+                              className="hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                              title="Bullet List"
+                            >
+                              • List
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowSketchpad(!showSketchpad)}
+                              className="hover:text-purple-300 px-1.5 py-0.5 rounded cursor-pointer text-purple-400 font-semibold"
+                            >
+                              ✏️ Sketch
+                            </button>
+                          </div>
+                          <span className="font-mono text-[10px] uppercase tracking-wider text-purple-400/80">MARKDOWN</span>
+                        </div>
+                      </div>
+
+                      {/* Sketchpad Drawer */}
+                      {showSketchpad && (
+                        <div className="p-3 rounded-xl border border-purple-500/30 bg-black/70 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-purple-300">Hand-Drawn Sketch Payload</span>
+                            <button
+                              type="button"
+                              onClick={clearCanvas}
+                              className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                            >
+                              Clear Canvas
+                            </button>
+                          </div>
+                          <canvas
+                            ref={canvasRef}
+                            width={340}
+                            height={120}
+                            onMouseDown={startDrawing}
+                            onMouseMove={draw}
+                            onMouseUp={stopDrawing}
+                            onMouseLeave={stopDrawing}
+                            className="w-full h-28 bg-[#0a0b14] border border-purple-500/20 rounded-lg cursor-crosshair"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Input Mode: FILE */}
+                  {inputMode === 'file' && (
+                    <div className="space-y-4 text-left">
+                      <label className="block p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5 text-center cursor-pointer transition-all">
+                        <Upload className="w-7 h-7 text-purple-400 mx-auto mb-2" />
+                        <span className="text-xs font-bold text-white block">
+                          {file ? file.name : 'Upload Encrypted Payload File'}
+                        </span>
+                        <span className="text-[11px] text-[#5c5c80] block mt-1">
+                          {file ? `${(file.size / 1024).toFixed(1)} KB attached` : 'Max size 700KB. Any file type.'}
+                        </span>
+                        <input type="file" onChange={handleFileUpload} className="hidden" />
+                      </label>
+
+                      {/* Voice Note Option */}
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-purple-500/20 bg-black/40">
+                        <div className="flex items-center gap-2 text-xs text-[#9b9bbf]">
+                          <Mic className="w-4 h-4 text-purple-400" />
+                          <span>Voice Recording</span>
+                          {isRecording && (
+                            <span className="text-rose-400 font-mono text-[10px] animate-pulse">
+                              ● REC {recordingDuration}s
+                            </span>
+                          )}
+                        </div>
+
+                        {isRecording ? (
+                          <button
+                            type="button"
+                            onClick={stopRecording}
+                            className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Square className="w-3 h-3" /> Stop
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={startRecording}
+                            className="px-3 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold cursor-pointer"
+                          >
+                            Record Memo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Input Mode: CODE */}
+                  {inputMode === 'code' && (
+                    <div className="space-y-3 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#9b9bbf]">Language Syntax</span>
+                        <select
+                          value={codeLanguage}
+                          onChange={e => setCodeLanguage(e.target.value)}
+                          className="bg-black/60 border border-purple-500/20 text-xs rounded-lg px-2.5 py-1 text-white outline-none cursor-pointer"
+                        >
+                          <option value="javascript">JavaScript / TypeScript</option>
+                          <option value="python">Python</option>
+                          <option value="rust">Rust</option>
+                          <option value="go">Go</option>
+                          <option value="sql">SQL</option>
+                          <option value="json">JSON</option>
+                          <option value="html">HTML / CSS</option>
+                          <option value="plaintext">Plain Text</option>
+                        </select>
+                      </div>
+
+                      <textarea
+                        rows={7}
+                        placeholder="// Paste code here..."
+                        value={text}
+                        onChange={handleTextChange}
+                        className="w-full p-3.5 text-xs text-teal-300 font-mono bg-black/60 border border-purple-500/20 rounded-xl outline-none resize-none placeholder:text-[#5c5c80]"
+                      />
+                    </div>
+                  )}
+
+                  {/* PROTECTION SECTION */}
+                  <div className="space-y-3 pt-2 border-t text-left" style={{ borderColor: 'rgba(120, 80, 255, 0.12)' }}>
+                    <span className="section-label">PROTECTION</span>
+
+                    {/* Password protection toggle */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-3.5 h-3.5 text-purple-400" />
+                          <span className="text-xs font-semibold text-white">Password protection</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !passwordProtection;
+                            setPasswordProtection(next);
+                            addLog(`> config: password protection [${next ? 'ENABLED' : 'DISABLED'}]`);
+                          }}
+                          className={`toggle-track ${passwordProtection ? 'on' : 'off'}`}
+                        >
+                          <span className="toggle-thumb" />
+                        </button>
+                      </div>
+
+                      {passwordProtection && (
+                        <input
+                          type="password"
+                          placeholder="Set capsule passkey..."
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          className="w-full glass-input px-3.5 py-2 text-xs rounded-xl animate-slide-up"
+                        />
+                      )}
+                    </div>
+
+                    {/* Burn after reading toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-3.5 h-3.5 text-rose-400" />
+                        <span className="text-xs font-semibold text-white">Burn after reading</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !burnAfterReading;
+                          setBurnAfterReading(next);
+                          addLog(`> config: burn after reading [${next ? 'ENABLED' : 'DISABLED'}]`);
+                        }}
+                        className={`toggle-track ${burnAfterReading ? 'on' : 'off'}`}
+                      >
+                        <span className="toggle-thumb" />
+                      </button>
+                    </div>
+
+                    {/* Set expiry dropdown */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-teal-400" />
+                        <span className="text-xs font-semibold text-white">Set expiry</span>
+                      </div>
+                      <select
+                        value={expiryOption}
+                        onChange={e => {
+                          setExpiryOption(e.target.value);
+                          addLog(`> config: expiry set to [${e.target.options[e.target.selectedIndex].text}]`);
+                        }}
+                        className="bg-black/60 border border-purple-500/20 text-xs rounded-lg px-2.5 py-1 text-white outline-none cursor-pointer"
+                      >
+                        <option value="300">5 minutes</option>
+                        <option value="600">10 minutes</option>
+                        <option value="3600">1 hour</option>
+                        <option value="86400">1 day</option>
+                        <option value="604800">1 week</option>
+                        <option value="never">Never</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* GENERATE CAPSULE BUTTON */}
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleGenerateCapsule}
+                    className="btn-primary w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xl shadow-purple-900/40 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Encrypting & Generating...' : 'Generate Capsule'}</span>
+                  </button>
+
+                  {/* Paranoid Mode Toggle */}
+                  <div
+                    className="p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left"
+                    style={{ background: 'rgba(139, 92, 246, 0.05)', borderColor: 'rgba(139, 92, 246, 0.2)' }}
+                  >
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
+                        Paranoid Mode
+                      </span>
+                      <p className="text-[10px] text-[#9b9bbf]">
+                        Maximum security. Key split via Shamir&apos;s Secret Sharing (2-of-3 custodians).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !paranoidMode;
+                        setParanoidMode(next);
+                        addLog(`> config: paranoid mode [${next ? 'ENABLED' : 'DISABLED'}]`);
+                      }}
+                      className={`toggle-track ${paranoidMode ? 'on' : 'off'}`}
+                    >
+                      <span className="toggle-thumb" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* -------------------------------------------------- */}
+              {/* COLUMN 3 (RIGHT): Security Score Card (3 cols)     */}
+              {/* -------------------------------------------------- */}
+              <div className="lg:col-span-3">
+                <div
+                  className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 text-left border border-purple-500/20 h-full"
+                  style={{ background: 'rgba(14, 16, 32, 0.85)' }}
+                >
+                  <p className="section-label">SECURITY SCORE</p>
+
+                  {/* Circular Arc Meter */}
+                  <div className="flex flex-col items-center py-2">
+                    <svg width="130" height="75" viewBox="0 0 130 75" className="overflow-visible">
+                      <path
+                        d="M 12 70 A 52 52 0 0 1 118 70"
+                        fill="none"
+                        stroke="rgba(120,80,255,0.15)"
+                        strokeWidth="9"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M 12 70 A 52 52 0 0 1 118 70"
+                        fill="none"
+                        stroke="url(#purpleTealGrad)"
+                        strokeWidth="9"
+                        strokeLinecap="round"
+                        strokeDasharray={`${Math.PI * 52}`}
+                        strokeDashoffset={`${Math.PI * 52 * (1 - securityScore / 100)}`}
+                        style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+                      />
+                      <defs>
+                        <linearGradient id="purpleTealGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#7c3aed" />
+                          <stop offset="100%" stopColor="#2dd4bf" />
+                        </linearGradient>
+                      </defs>
+                      <text x="65" y="68" textAnchor="middle" fill="#ffffff" fontSize="26" fontWeight="900">
+                        {securityScore}
+                      </text>
+                    </svg>
+
+                    <p className="text-xs font-bold text-emerald-400 -mt-0.5 flex items-center gap-1">
+                      <span>✓</span> {securityScore >= 90 ? 'Excellent' : securityScore >= 70 ? 'Strong' : 'Standard'}
+                    </p>
+                  </div>
+
+                  {/* Checklist */}
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className="flex items-center gap-1.5 text-white">
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> AES-256-GCM Encryption
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className={`flex items-center gap-1.5 ${passwordProtection ? 'text-white' : 'text-[#5c5c80]'}`}>
+                        {passwordProtection ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <X className="w-3.5 h-3.5 text-[#5c5c80]" />}
+                        Password Protected
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className={`flex items-center gap-1.5 ${burnAfterReading ? 'text-white' : 'text-[#5c5c80]'}`}>
+                        {burnAfterReading ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <X className="w-3.5 h-3.5 text-[#5c5c80]" />}
+                        Burn After Read
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className="flex items-center gap-1.5 text-white">
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Short Expiry ({expiryOption === '600' ? '10m' : expiryOption === '300' ? '5m' : 'Custom'})
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className="flex items-center gap-1.5 text-white">
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Zero-Knowledge
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#9b9bbf]">
+                      <span className="flex items-center gap-1.5 text-white">
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> No Tracking / No Logs
+                      </span>
+                      <span className="text-[10px] text-[#5c5c80]">ⓘ</span>
+                    </div>
+                  </div>
+
+                  {/* Warning Box */}
+                  <div
+                    className="p-3 rounded-xl border text-[11px] text-[#9b9bbf] leading-relaxed"
+                    style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(120,80,255,0.12)' }}
+                  >
+                    🔒 Keep your link and password safe. CipherDrop can&apos;t recover them if lost.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </section>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left HUD sidebar */}
-          <div className="hidden lg:block lg:col-span-3 space-y-4">
-            <div className="glass-panel rounded-lg p-5 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-teal-400 opacity-50" />
-              <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-              <h3 className="font-mono text-xs text-violet-300 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                <ShieldAlert className="w-4 h-4" />
-                Security Protocol
-              </h3>
-              <ul className="space-y-4">
-                <li className="flex gap-3">
-                  <KeyRound className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-semibold text-text-main">AES-256-GCM</h4>
-                    <p className="text-[11px] text-text-ghost leading-relaxed">Military-grade encryption applied client-side.</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <Flame className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-semibold text-text-main">Self-Destruction</h4>
-                    <p className="text-[11px] text-text-ghost leading-relaxed">Payloads automatically vaporize upon read or expiry.</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <EyeOff className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-semibold text-text-main">Zero Tracking</h4>
-                    <p className="text-[11px] text-text-ghost leading-relaxed">No IP logging. No analytics. No traces left behind.</p>
-                  </div>
-                </li>
-              </ul>
+        {/* ========================================================= */}
+        {/* ARCHIVE VIEW (Matching Screenshot 4)                      */}
+        {/* ========================================================= */}
+        {activeTab === 'archive' && (
+          <div className="space-y-6 max-w-4xl mx-auto animate-slide-up text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4" style={{ borderColor: 'rgba(120, 80, 255, 0.12)' }}>
+              <div>
+                <h1 className="text-2xl font-black text-white tracking-tight">Archive</h1>
+                <p className="text-xs text-[#9b9bbf] mt-0.5">Manage your created capsules. Encrypted metadata only.</p>
+              </div>
+
+              {/* Search bar */}
+              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-black/40" style={{ borderColor: 'rgba(120, 80, 255, 0.15)' }}>
+                <Search className="w-3.5 h-3.5 text-[#5c5c80]" />
+                <input
+                  type="text"
+                  placeholder="Search capsules..."
+                  value={archiveSearch}
+                  onChange={e => setArchiveSearch(e.target.value)}
+                  className="bg-transparent text-xs text-white placeholder:text-[#5c5c80] outline-none w-44"
+                />
+              </div>
             </div>
 
-            <div className="glass-panel rounded-lg p-5">
-              <h3 className="text-[10px] text-text-ghost mb-3 uppercase tracking-widest flex items-center gap-1.5">
-                <Radio className="w-3 h-3" />
-                System Status
-              </h3>
+            {/* Filter pills */}
+            <div
+              className="inline-flex p-1 rounded-xl gap-1 border"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(120, 80, 255, 0.12)' }}
+            >
+              {(['active', 'viewed', 'destroyed'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setArchiveFilter(tab)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
+                    archiveFilter === tab
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'text-[#9b9bbf] hover:text-white'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* List */}
+            <div className="space-y-2.5">
+              {archiveItems
+                .filter(item => {
+                  const matchesFilter = item.status === archiveFilter;
+                  const matchesSearch = item.title.toLowerCase().includes(archiveSearch.toLowerCase()) ||
+                    item.code.toLowerCase().includes(archiveSearch.toLowerCase());
+                  return matchesFilter && matchesSearch;
+                })
+                .map(item => (
+                  <div
+                    key={item.id}
+                    className="glass-panel rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 hover:border-purple-500/30 transition-all"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          item.status === 'active'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : item.status === 'viewed'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {item.type === 'code' ? (
+                          <Code className="w-5 h-5" />
+                        ) : item.type === 'file' ? (
+                          <Upload className="w-5 h-5" />
+                        ) : (
+                          <FileText className="w-5 h-5" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                          <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                            {item.code}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#5c5c80] truncate mt-0.5">
+                          {item.expiryText} • {item.protectionText}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`badge ${
+                          item.status === 'active'
+                            ? 'badge-active'
+                            : item.status === 'viewed'
+                            ? 'badge-viewed'
+                            : 'badge-destroyed'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+
+                      {item.shareUrl && item.shareUrl !== '#' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(item.shareUrl);
+                            setToast({ message: 'Capsule link copied!', type: 'success' });
+                          }}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-[#9b9bbf] hover:text-white cursor-pointer"
+                          title="Copy Link"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* SETTINGS VIEW                                             */}
+        {/* ========================================================= */}
+        {activeTab === 'settings' && (
+          <div className="max-w-xl mx-auto space-y-6 animate-slide-up text-left">
+            <div className="border-b pb-4" style={{ borderColor: 'rgba(120, 80, 255, 0.12)' }}>
+              <h1 className="text-2xl font-black text-white tracking-tight">Settings</h1>
+              <p className="text-xs text-[#9b9bbf] mt-0.5">Client-side operational preferences. Saved locally.</p>
+            </div>
+
+            <div className="glass-panel rounded-2xl p-6 space-y-6">
+              {/* Default Expiry */}
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-text-ghost">Network</span>
-                  <span className="text-[11px] font-semibold text-emerald-400">SECURE</span>
+                <label className="text-xs font-bold text-[#9b9bbf] uppercase tracking-wider block">Default Retention Lifetime</label>
+                <select
+                  value={defaultExpirySetting}
+                  onChange={e => setDefaultExpirySetting(e.target.value)}
+                  className="w-full bg-black/60 border border-purple-500/20 text-xs rounded-xl p-3 text-white outline-none cursor-pointer font-semibold"
+                >
+                  <option value="300">5 Minutes</option>
+                  <option value="600">10 Minutes (Recommended)</option>
+                  <option value="3600">1 Hour</option>
+                  <option value="86400">1 Day</option>
+                  <option value="604800">1 Week</option>
+                  <option value="never">Never (Manual Revoke)</option>
+                </select>
+              </div>
+
+              {/* Auto copy links toggle */}
+              <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'rgba(120, 80, 255, 0.1)' }}>
+                <div>
+                  <span className="text-xs font-bold text-white block">Auto-Copy on Generation</span>
+                  <span className="text-[10px] text-[#5c5c80]">Automatically copy recipient links to your clipboard.</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-text-ghost">Entropy Pool</span>
-                  <span className="text-[11px] font-semibold text-emerald-400">99.9%</span>
+                <button
+                  type="button"
+                  onClick={() => setAutoCopySetting(!autoCopySetting)}
+                  className={`toggle-track ${autoCopySetting ? 'on' : 'off'}`}
+                >
+                  <span className="toggle-thumb" />
+                </button>
+              </div>
+
+              {/* Tactical Scanlines */}
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">Tactical HUD Scanlines</span>
+                  <span className="text-[10px] text-[#5c5c80]">Overlay subtle CRT scanline filter.</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setScanlinesSetting(!scanlinesSetting)}
+                  className={`toggle-track ${scanlinesSetting ? 'on' : 'off'}`}
+                >
+                  <span className="toggle-thumb" />
+                </button>
               </div>
             </div>
-          </div>
 
-          {/* Paste creation form */}
-          <div className="lg:col-span-9 space-y-3">
-            <div className="flex items-center justify-end gap-2 px-1">
-              <span className="text-[10px] font-mono text-text-ghost uppercase tracking-wider">T-Terminal_Active</span>
-              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-            </div>
-            <PasteForm defaultMethod={defaultMethod} />
+            <button
+              type="button"
+              onClick={() => {
+                setToast({ message: 'Settings saved to browser node.', type: 'success' });
+                setActiveTab('terminal');
+              }}
+              className="btn-primary w-full py-3.5 rounded-xl text-xs font-bold"
+            >
+              Apply Preferences
+            </button>
           </div>
-        </div>
-
+        )}
       </main>
 
+      {/* QR Code Modal */}
+      {showQrModal && createdCapsule && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
+          <div
+            className="glass-panel-elevated max-w-sm w-full p-6 rounded-3xl text-center space-y-4 border border-purple-500/30"
+            style={{ background: 'rgba(14, 16, 32, 0.95)' }}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/5">
+              <span className="text-xs font-bold text-white">Capsule QR Code</span>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="text-[#5c5c80] hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-white rounded-2xl inline-block mx-auto shadow-2xl">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(createdCapsule.shareUrl)}`}
+                alt="QR Code"
+                className="w-48 h-48"
+              />
+            </div>
+
+            <p className="text-xs text-[#9b9bbf]">Scan with mobile camera to decrypt capsule.</p>
+
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="btn-primary w-full py-2.5 rounded-xl text-xs font-bold"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="w-full py-8 border-t border-panel-border bg-panel-bg mt-16 text-center text-xs text-text-ghost">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© {new Date().getFullYear()} CipherDrop. Built for CloneFest — Rebuild the Legacy.</p>
+      <footer
+        className="w-full py-6 mt-16 text-center text-xs"
+        style={{ borderTop: '1px solid rgba(120, 80, 255, 0.1)', color: '#5c5c80' }}
+      >
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>© {new Date().getFullYear()} CipherDrop — Zero-knowledge secure sharing.</p>
           <div className="flex gap-4">
-            <span className="hover:text-text-main transition-colors cursor-default">Privacy Deniability</span>
-            <span className="hover:text-text-main transition-colors cursor-default">Secure Audited Cryptography</span>
+            <span>Privacy Deniability</span>
+            <span>AES-256-GCM Zero-Knowledge</span>
           </div>
         </div>
       </footer>

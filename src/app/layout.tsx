@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import { ThemeProvider } from '@/components/ThemeProvider';
 
 const outfit = Outfit({
   variable: '--font-sans',
@@ -16,13 +15,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'CipherDrop — Zero-Knowledge Secure Sharing',
-  description: 'A secure, minimalist pastebin where the server has zero knowledge of your pasted data. Encrypted and decrypted client-side in the browser.',
-  keywords: 'secure paste, pastebin, zero-knowledge, aes-256-gcm, secure notes, cipherdrop',
+  title: 'CipherDrop — Drop a secret. Only they can open it.',
+  description: 'Zero-knowledge encrypted capsules. AES-256-GCM encryption happens entirely in your browser — nothing is sent in plaintext.',
+  keywords: 'secure paste, pastebin, zero-knowledge, aes-256-gcm, secure notes, cipherdrop, encrypted',
   openGraph: {
-    title: 'CipherDrop — Zero-Knowledge Secure Sharing',
-    description: 'A modern, zero-knowledge secure text and code sharing platform.',
-    url: 'https://cipherdrop.vercel.app',
+    title: 'CipherDrop — Drop a secret. Only they can open it.',
+    description: 'Zero-knowledge encrypted capsules. AES-256-GCM encryption happens entirely in your browser.',
+    url: 'https://cipherdrop.app',
     siteName: 'CipherDrop',
     type: 'website',
   },
@@ -39,24 +38,9 @@ export default function RootLayout({
       className={`${outfit.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                document.documentElement.classList.add('dark')
-                document.documentElement.classList.remove('light')
-                localStorage.theme = 'dark';
-              } catch (_) {}
-            `,
-          }}
-        />
-      </head>
-      <body className="min-h-full flex flex-col font-sans">
-        <ThemeProvider>
-          <div className="glow-bg" />
-          <div className="relative z-10 min-h-full flex flex-col">{children}</div>
-        </ThemeProvider>
+      <body className="min-h-full flex flex-col font-sans bg-[#0a0b14]">
+        <div className="glow-bg" />
+        <div className="relative z-10 min-h-full flex flex-col">{children}</div>
       </body>
     </html>
   );
