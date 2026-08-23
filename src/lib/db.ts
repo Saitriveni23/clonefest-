@@ -3,13 +3,16 @@ import { Redis } from '@upstash/redis';
 // Initialize Redis client from env variables
 let redis: Redis | null = null;
 try {
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    redis = Redis.fromEnv();
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+
+  if (url && token) {
+    redis = new Redis({ url, token });
   } else {
-    console.warn("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set. Redis is not initialized.");
+    console.warn("No persistent Redis/KV database variables found. Using in-memory fallback.");
   }
 } catch (e) {
-  console.error("Failed to initialize Upstash Redis:", e);
+  console.error("Failed to initialize Redis/KV client:", e);
 }
 
 export interface PasteRow {
