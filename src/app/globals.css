@@ -327,3 +327,24 @@ body {
   box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
   border-color: rgba(139, 92, 246, 0.5);
 }
+
+@keyframes shinchan-walk {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25% { transform: translateY(-4px) rotate(-3deg); }
+  75% { transform: translateY(-4px) rotate(3deg); }
+}
+
+@keyframes shinchan-wiggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-8deg) scale(1.05); }
+  75% { transform: rotate(8deg) scale(1.05); }
+}
+
+.animate-walk {
+  animation: shinchan-walk 0.6s infinite ease-in-out;
+}
+
+.animate-wiggle {
+  animation: shinchan-wiggle 0.4s infinite ease-in-out;
+}
+
