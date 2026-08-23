@@ -62,11 +62,13 @@ function scanForPii(text: string): string[] {
     [/AKIA[0-9A-Z]{16}/i, '☁️ AWS Access Key ID detected'],
     [/(?:-----BEGIN (?:RSA |EC )?PRIVATE KEY-----)/i, '🔐 Private key block detected'],
     [/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i, '📧 Email address detected'],
+    [/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/, '📞 Potential phone number detected'],
     [/\b(?:\d[ -]?){15,16}\b/, '💳 Potential credit card number detected'],
     [/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/i, '🐙 GitHub Personal Access Token detected'],
     [/sk-[a-zA-Z0-9]{40,}/i, '🤖 OpenAI API key pattern detected'],
     [/(?:SSN|social.?security)\D{0,5}\d{3}[-.\s]\d{2}[-.\s]\d{4}/i, '🪪 SSN pattern detected'],
     [/(?:xox[baprs]-)[0-9A-Za-z\-]+/i, '💬 Slack token detected'],
+    [/\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/, '🌐 Internal or Public IPv4 Address detected'],
   ];
   for (const [pattern, message] of checks) {
     if (pattern.test(text)) warnings.push(message);
@@ -2052,8 +2054,11 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                       </div>
                       <div className="flex justify-between text-[10px]">
                         <span className={`font-bold ${textColors[level]}`}>{labels[level]}</span>
-                        <span className="text-text-ghost">{entropy} bits · crack: {crackTimes[level]}</span>
+                        <span className="text-text-ghost">Secondary barrier strength: {entropy} bits · Est. Guess Time: {crackTimes[level]}</span>
                       </div>
+                      <p className="text-[9px] text-text-ghost mt-1 leading-normal text-left">
+                        ℹ️ Note: The note ciphertext is always secured with a high-entropy 256-bit AES-GCM client-side key. This optional password acts as an additional layer.
+                      </p>
                     </div>
                   );
                 })()}
