@@ -10,7 +10,8 @@ import {
   FileText, Code, Lock, Unlock, Calendar, 
   Trash2, Upload, X, Copy, Check, QrCode, ArrowRight, ShieldCheck, Loader2,
   Share2, Users2, MessageSquareCode, Image as ImageIcon, Bot, Download, Eye,
-  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw, Cpu, Globe, ShieldAlert
+  Mic, Square, Volume2, AlertCircle, Fingerprint, RefreshCw, Cpu, Globe, ShieldAlert,
+  Camera, Video, VideoOff, RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
@@ -301,6 +302,144 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    }
+  };
+
+  // Video recording states and refs
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
+  const [videoRecordingDuration, setVideoRecordingDuration] = useState(0);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoLiveRef = useRef<HTMLVideoElement | null>(null);
+  const videoRecorderRef = useRef<any>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const stopCamera = () => {
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach(t => t.stop());
+      videoStreamRef.current = null;
+    }
+    if (videoLiveRef.current) {
+      videoLiveRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    setIsVideoRecording(false);
+    if (videoTimerRef.current) {
+      clearInterval(videoTimerRef.current);
+      videoTimerRef.current = null;
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+        audio: true
+      });
+      videoStreamRef.current = stream;
+      setIsCameraActive(true);
+      if (videoLiveRef.current) {
+        videoLiveRef.current.srcObject = stream;
+        try {
+          await videoLiveRef.current.play();
+        } catch (e) {}
+      }
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: 'Camera or microphone access denied.', type: 'error' });
+    }
+  };
+
+  const startVideoRecording = async () => {
+    try {
+      let stream = videoStreamRef.current;
+      if (!stream || !stream.active) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+          audio: true
+        });
+        videoStreamRef.current = stream;
+        setIsCameraActive(true);
+        if (videoLiveRef.current) {
+          videoLiveRef.current.srcObject = stream;
+          try {
+            await videoLiveRef.current.play();
+          } catch (e) {}
+        }
+      }
+
+      const mimeTypes = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+      const selectedMime = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+      const options: any = { mimeType: selectedMime };
+      try {
+        options.videoBitsPerSecond = 350000;
+        options.audioBitsPerSecond = 32000;
+      } catch (e) {}
+
+      const recorder = new MediaRecorder(stream, options);
+      videoChunksRef.current = [];
+
+      recorder.ondataavailable = (e: any) => {
+        if (e.data && e.data.size > 0) {
+          videoChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const videoBlob = new Blob(videoChunksRef.current, { type: selectedMime });
+        if (videoBlob.size > 700 * 1024) {
+          setToast({
+            message: `Video size (${(videoBlob.size / 1024).toFixed(0)}KB) exceeds 700KB limit. Please record a shorter clip.`,
+            type: 'error'
+          });
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          setFile({
+            name: 'video_memo.webm',
+            type: selectedMime,
+            size: videoBlob.size,
+            data: reader.result as string
+          });
+          setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
+          stopCamera();
+        };
+        reader.readAsDataURL(videoBlob);
+      };
+
+      videoRecorderRef.current = recorder;
+      recorder.start(500);
+      setIsVideoRecording(true);
+      setVideoRecordingDuration(0);
+
+      videoTimerRef.current = setInterval(() => {
+        setVideoRecordingDuration(prev => {
+          if (prev >= 29) {
+            stopVideoRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: 'Failed to start video recording.', type: 'error' });
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+      videoRecorderRef.current.stop();
+      setIsVideoRecording(false);
+      if (videoTimerRef.current) {
+        clearInterval(videoTimerRef.current);
+        videoTimerRef.current = null;
+      }
     }
   };
 
@@ -1514,11 +1653,21 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                   <div className="flex items-center justify-between p-3.5 rounded-xl border border-teal-500/20 bg-teal-500/5 animate-slide-in">
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                        {file.name.startsWith('voice_memo.') ? <Volume2 className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                        {file.name.startsWith('voice_memo.') || file.name.includes('voice') ? (
+                          <Volume2 className="w-4 h-4" />
+                        ) : file.name.startsWith('video_memo.') || file.name.includes('video') ? (
+                          <Camera className="w-4 h-4" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
                       </div>
                       <div className="flex flex-col text-left">
                         <span className="text-sm font-semibold text-text-main truncate max-w-xs sm:max-w-md">
-                          {file.name.startsWith('voice_memo.') ? 'Secure Voice Note Memo' : file.name}
+                          {file.name.startsWith('voice_memo.') || file.name.includes('voice')
+                            ? 'Secure Voice Note Memo'
+                            : file.name.startsWith('video_memo.') || file.name.includes('video')
+                            ? 'Secure Video Capsule'
+                            : file.name}
                         </span>
                         <span className="text-xs text-text-ghost">
                           {(file.size / 1024).toFixed(1)} KB • {file.type || 'Unknown Type'}
@@ -1539,7 +1688,7 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
                       <span className="text-xs font-semibold text-rose-400">
-                        Recording Voice Memo... {recordingDuration}s
+                        Recording Voice Memo... {recordingDuration}s / 60s
                       </span>
                     </div>
                     <button
@@ -1551,43 +1700,106 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                       Stop & Save
                     </button>
                   </div>
+                ) : isCameraActive ? (
+                  <div className="p-4 rounded-xl border border-purple-500/30 bg-black/80 space-y-3">
+                    <div className="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center">
+                      <video
+                        ref={videoLiveRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100"
+                      />
+                      <div className="absolute top-3 left-3 flex items-center gap-2">
+                        {isVideoRecording ? (
+                          <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-rose-600 text-white font-mono text-[10px] font-bold animate-pulse">
+                            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                            REC 00:{videoRecordingDuration < 10 ? `0${videoRecordingDuration}` : videoRecordingDuration} / 00:30
+                          </div>
+                        ) : (
+                          <div className="px-2 py-0.5 rounded bg-black/70 border border-emerald-500/40 text-emerald-400 font-mono text-[10px]">
+                            VIEWFINDER READY
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isVideoRecording ? (
+                        <button
+                          type="button"
+                          onClick={stopVideoRecording}
+                          className="flex-1 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase cursor-pointer"
+                        >
+                          Stop & Save Video
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={startVideoRecording}
+                            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase cursor-pointer"
+                          >
+                            Record Video (30s Max)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopCamera}
+                            className="px-3 py-2 rounded-lg bg-white/10 text-xs text-[#9b9bbf] hover:text-white cursor-pointer"
+                          >
+                            <VideoOff className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      <Tooltip text="Attach a file (max 700KB) — it's encrypted client-side and bundled alongside your text." className="w-full">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <Tooltip text="Attach a file (max 700KB) — encrypted client-side." className="w-full">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                          className="w-full flex flex-col sm:flex-row items-center justify-center gap-1.5 p-3 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
                         >
                           <Upload className="w-4 h-4 text-violet-400" />
-                          Attach Secure File (700KB Max)
+                          <span>Attach File</span>
                         </button>
                       </Tooltip>
 
-                      <Tooltip text="Record an audio memo from your microphone to send instead of, or alongside, text." className="w-full">
+                      <Tooltip text="Record an audio memo from your microphone." className="w-full">
                         <button
                           type="button"
                           onClick={startRecording}
-                          className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                          className="w-full flex flex-col sm:flex-row items-center justify-center gap-1.5 p-3 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
                         >
                           <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
-                          Record Voice Memo
+                          <span>Voice Memo</span>
                         </button>
                       </Tooltip>
 
-                      <Tooltip text="Open a drawing canvas for diagrams or signatures — the sketch is encrypted along with your note." className="w-full">
+                      <Tooltip text="Record an encrypted video message from your camera." className="w-full">
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="w-full flex flex-col sm:flex-row items-center justify-center gap-1.5 p-3 rounded-xl border border-dashed border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-xs font-semibold text-text-muted hover:text-text-main transition-all cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4 text-purple-400" />
+                          <span>Video Note</span>
+                        </button>
+                      </Tooltip>
+
+                      <Tooltip text="Open drawing canvas for diagrams or signatures." className="w-full">
                         <button
                           type="button"
                           onClick={() => setIsDrawingEnabled(!isDrawingEnabled)}
-                          className={`w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border border-dashed transition-all cursor-pointer text-xs font-semibold ${
+                          className={`w-full flex flex-col sm:flex-row items-center justify-center gap-1.5 p-3 rounded-xl border border-dashed transition-all cursor-pointer text-xs font-semibold ${
                             isDrawingEnabled
                               ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-bold'
                               : 'border-input-border hover:border-panel-border bg-btn-sec-bg hover:bg-btn-sec-hover text-text-muted hover:text-text-main'
                           }`}
                         >
                           <Cpu className="w-4 h-4 text-sky-400" />
-                          Draw Secure Sketch
+                          <span>Sketch Board</span>
                         </button>
                       </Tooltip>
                     </div>

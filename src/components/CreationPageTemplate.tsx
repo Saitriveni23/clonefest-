@@ -9,7 +9,8 @@ import {
   PenLine, SlidersHorizontal, Link2, ChevronRight, Copy, Check,
   QrCode, ArrowRight, ShieldAlert, FileText, Code, Upload, X,
   Trash2, Search, MoreHorizontal, Clock, RefreshCw, AlertTriangle,
-  Mic, Square, Volume2, Bot, Sparkles, ExternalLink, Terminal as TerminalIcon
+  Mic, Square, Volume2, Bot, Sparkles, ExternalLink, Terminal as TerminalIcon,
+  Video, VideoOff, Camera, RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
@@ -49,8 +50,8 @@ async function hashSha256(text: string): Promise<string> {
 export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageTemplateProps) {
   const [activeTab, setActiveTab] = useState<'landing' | 'terminal' | 'archive' | 'settings'>('landing');
 
-  // Terminal mode: Text vs File vs Code
-  const [inputMode, setInputMode] = useState<'text' | 'file' | 'code'>('text');
+  // Terminal mode: Text vs File vs Code vs Voice vs Video
+  const [inputMode, setInputMode] = useState<'text' | 'file' | 'code' | 'voice' | 'video'>('text');
 
   // Input states
   const [text, setText] = useState('');
@@ -77,6 +78,17 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+
+  // Video recording state
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
+  const [videoRecordingDuration, setVideoRecordingDuration] = useState(0);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoLiveRef = useRef<HTMLVideoElement | null>(null);
+  const videoRecorderRef = useRef<any>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const videoTimerRef = useRef<any>(null);
 
   // System Log state
   const [logs, setLogs] = useState<string[]>([
@@ -114,6 +126,239 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const [defaultExpirySetting, setDefaultExpirySetting] = useState('600');
   const [autoCopySetting, setAutoCopySetting] = useState(true);
   const [scanlinesSetting, setScanlinesSetting] = useState(false);
+
+  // Stop camera stream safely
+  const stopCamera = () => {
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach(t => t.stop());
+      videoStreamRef.current = null;
+    }
+    if (videoLiveRef.current) {
+      videoLiveRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    setIsVideoRecording(false);
+    if (videoTimerRef.current) {
+      clearInterval(videoTimerRef.current);
+      videoTimerRef.current = null;
+    }
+  };
+
+  // Turn off camera if user leaves video mode
+  useEffect(() => {
+    if (inputMode !== 'video') {
+      stopCamera();
+    }
+  }, [inputMode]);
+
+  // Clean up all streams on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Voice recording handlers
+  const startRecording = async () => {
+    try {
+      if (isRecording) stopRecording();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+      const selectedMime = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || 'audio/webm';
+
+      const options: any = { mimeType: selectedMime };
+      try {
+        options.audioBitsPerSecond = 24000; // 24 kbps opus is crisp for speech and ultra compact
+      } catch (e) {}
+
+      const recorder = new MediaRecorder(stream, options);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: selectedMime });
+        const reader = new FileReader();
+        reader.onload = () => {
+          setFile({
+            name: 'classified_voice_note.webm',
+            type: selectedMime,
+            size: audioBlob.size,
+            data: reader.result as string
+          });
+          addLog(`> attached voice memo: ${(audioBlob.size / 1024).toFixed(1)} KB`);
+          setToast({ message: 'Voice memo recorded successfully!', type: 'success' });
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(500);
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => {
+          if (prev >= 59) {
+            stopRecording();
+            return 60;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+      addLog('> voice memo recording started [MAX 60s]...');
+    } catch (err) {
+      console.error(err);
+      setToast({ message: 'Microphone access denied.', type: 'error' });
+      addLog('> [ERR] microphone access denied');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+
+  // Video recording handlers
+  const startCamera = async () => {
+    try {
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+        audio: true
+      });
+      videoStreamRef.current = stream;
+      setIsCameraActive(true);
+      if (videoLiveRef.current) {
+        videoLiveRef.current.srcObject = stream;
+        try {
+          await videoLiveRef.current.play();
+        } catch (e) {}
+      }
+      addLog('> camera viewfinder initialized [24 FPS 640x480]');
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: 'Camera or microphone access denied.', type: 'error' });
+      addLog('> [ERR] camera access denied');
+    }
+  };
+
+  const startVideoRecording = async () => {
+    try {
+      let stream = videoStreamRef.current;
+      if (!stream || !stream.active) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+          audio: true
+        });
+        videoStreamRef.current = stream;
+        setIsCameraActive(true);
+        if (videoLiveRef.current) {
+          videoLiveRef.current.srcObject = stream;
+          try {
+            await videoLiveRef.current.play();
+          } catch (e) {}
+        }
+      }
+
+      const mimeTypes = [
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm',
+        'video/mp4'
+      ];
+      const selectedMime = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+      const options: any = { mimeType: selectedMime };
+      try {
+        options.videoBitsPerSecond = 350000; // ~350 kbps (keeps 20-30s well within payload budget)
+        options.audioBitsPerSecond = 32000;
+      } catch (e) {}
+
+      const recorder = new MediaRecorder(stream, options);
+      videoChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          videoChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const videoBlob = new Blob(videoChunksRef.current, { type: selectedMime });
+
+        if (videoBlob.size > 700 * 1024) {
+          setToast({
+            message: `Video size (${(videoBlob.size / 1024).toFixed(0)}KB) exceeds 700KB payload limit. Please record a shorter clip.`,
+            type: 'error'
+          });
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          setFile({
+            name: 'classified_video_memo.webm',
+            type: selectedMime,
+            size: videoBlob.size,
+            data: reader.result as string
+          });
+          addLog(`> attached video capsule: ${(videoBlob.size / 1024).toFixed(1)} KB`);
+          setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
+          stopCamera();
+        };
+        reader.readAsDataURL(videoBlob);
+      };
+
+      videoRecorderRef.current = recorder;
+      recorder.start(500);
+      setIsVideoRecording(true);
+      setVideoRecordingDuration(0);
+
+      videoTimerRef.current = setInterval(() => {
+        setVideoRecordingDuration(prev => {
+          if (prev >= 29) {
+            stopVideoRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+
+      addLog('> video recording started [MAX 30s]...');
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: 'Failed to start video recording.', type: 'error' });
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+      videoRecorderRef.current.stop();
+      setIsVideoRecording(false);
+      if (videoTimerRef.current) {
+        clearInterval(videoTimerRef.current);
+        videoTimerRef.current = null;
+      }
+    }
+  };
 
   // Load Archive from local storage
   const loadArchive = () => {
@@ -407,49 +652,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     reader.readAsDataURL(uploaded);
   };
 
-  // Voice recording
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.onload = () => {
-          setFile({
-            name: 'classified_voice_note.webm',
-            type: 'audio/webm',
-            size: audioBlob.size,
-            data: reader.result as string
-          });
-          addLog('> attached audio: classified_voice_note.webm');
-          setToast({ message: 'Voice recording saved!', type: 'success' });
-        };
-        reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setIsRecording(true);
-      setRecordingDuration(0);
-      recordingTimerRef.current = setInterval(() => setRecordingDuration(d => d + 1), 1000);
-      addLog('> audio recording started...');
-    } catch (err) {
-      setToast({ message: 'Microphone access denied.', type: 'error' });
-    }
-  };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-    }
-  };
 
   // Canvas drawing
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -928,13 +1131,15 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                 >
                   {/* Mode Selector Tabs */}
                   <div
-                    className="flex p-1 rounded-xl gap-1 border"
+                    className="flex p-1 rounded-xl gap-1 border overflow-x-auto"
                     style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(120, 80, 255, 0.15)' }}
                   >
                     {[
                       { id: 'text', label: 'Text', icon: FileText },
                       { id: 'file', label: 'File', icon: Upload },
-                      { id: 'code', label: 'Code', icon: Code }
+                      { id: 'code', label: 'Code', icon: Code },
+                      { id: 'voice', label: 'Voice', icon: Mic },
+                      { id: 'video', label: 'Video', icon: Camera }
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -943,7 +1148,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                           setInputMode(tab.id as any);
                           addLog(`> switched input mode to: [${tab.label.toUpperCase()}]`);
                         }}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`flex-1 min-w-[55px] py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           inputMode === tab.id
                             ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
                             : 'text-[#9b9bbf] hover:text-white'
@@ -959,7 +1164,13 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                   <div className="space-y-1 text-left">
                     <input
                       type="text"
-                      placeholder="Title or Reference (Optional)"
+                      placeholder={
+                        inputMode === 'voice'
+                          ? 'Voice Note Title (Optional)'
+                          : inputMode === 'video'
+                          ? 'Video Capsule Title (Optional)'
+                          : 'Title or Reference (Optional)'
+                      }
                       value={title}
                       onChange={e => setTitle(e.target.value)}
                       className="w-full glass-input px-3.5 py-2 text-xs rounded-xl"
@@ -1047,46 +1258,76 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                   {/* Input Mode: FILE */}
                   {inputMode === 'file' && (
                     <div className="space-y-4 text-left">
-                      <label className="block p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5 text-center cursor-pointer transition-all">
-                        <Upload className="w-7 h-7 text-purple-400 mx-auto mb-2" />
-                        <span className="text-xs font-bold text-white block">
-                          {file ? file.name : 'Upload Encrypted Payload File'}
-                        </span>
-                        <span className="text-[11px] text-[#5c5c80] block mt-1">
-                          {file ? `${(file.size / 1024).toFixed(1)} KB attached` : 'Max size 700KB. Any file type.'}
-                        </span>
-                        <input type="file" onChange={handleFileUpload} className="hidden" />
-                      </label>
-
-                      {/* Voice Note Option */}
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-purple-500/20 bg-black/40">
-                        <div className="flex items-center gap-2 text-xs text-[#9b9bbf]">
-                          <Mic className="w-4 h-4 text-purple-400" />
-                          <span>Voice Recording</span>
-                          {isRecording && (
-                            <span className="text-rose-400 font-mono text-[10px] animate-pulse">
-                              ● REC {recordingDuration}s
-                            </span>
-                          )}
+                      {file ? (
+                        <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300">
+                              {file.type.startsWith('audio/') || file.name.includes('voice') ? (
+                                <Mic className="w-5 h-5" />
+                              ) : file.type.startsWith('video/') || file.name.includes('video') ? (
+                                <Camera className="w-5 h-5" />
+                              ) : (
+                                <Upload className="w-5 h-5" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-white truncate max-w-[200px] sm:max-w-xs">
+                                {file.name}
+                              </div>
+                              <div className="text-[11px] text-[#9b9bbf] font-mono">
+                                {(file.size / 1024).toFixed(1)} KB • {file.type || 'application/octet-stream'}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFile(null);
+                              addLog('> removed attached file');
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-[#9b9bbf] hover:text-rose-400 transition-colors cursor-pointer"
+                            title="Remove attachment"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
+                      ) : (
+                        <label className="block p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5 text-center cursor-pointer transition-all">
+                          <Upload className="w-7 h-7 text-purple-400 mx-auto mb-2" />
+                          <span className="text-xs font-bold text-white block">
+                            Upload Encrypted Payload File
+                          </span>
+                          <span className="text-[11px] text-[#5c5c80] block mt-1">
+                            Max size 700KB. Any file type.
+                          </span>
+                          <input type="file" onChange={handleFileUpload} className="hidden" />
+                        </label>
+                      )}
 
-                        {isRecording ? (
-                          <button
-                            type="button"
-                            onClick={stopRecording}
-                            className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            <Square className="w-3 h-3" /> Stop
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={startRecording}
-                            className="px-3 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold cursor-pointer"
-                          >
-                            Record Memo
-                          </button>
-                        )}
+                      {/* Quick Media Recording Shortcuts */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInputMode('voice');
+                            addLog('> switched to: [VOICE NOTE]');
+                          }}
+                          className="p-2.5 rounded-xl border border-purple-500/20 bg-black/40 hover:bg-purple-500/10 flex items-center justify-center gap-2 text-xs font-semibold text-[#9b9bbf] hover:text-purple-300 transition-all cursor-pointer"
+                        >
+                          <Mic className="w-4 h-4 text-purple-400" />
+                          <span>Voice Memo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInputMode('video');
+                            addLog('> switched to: [VIDEO CAPSULE]');
+                          }}
+                          className="p-2.5 rounded-xl border border-purple-500/20 bg-black/40 hover:bg-purple-500/10 flex items-center justify-center gap-2 text-xs font-semibold text-[#9b9bbf] hover:text-purple-300 transition-all cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4 text-purple-400" />
+                          <span>Video Capsule</span>
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1119,6 +1360,300 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                         onChange={handleTextChange}
                         className="w-full p-3.5 text-xs text-teal-300 font-mono bg-black/60 border border-purple-500/20 rounded-xl outline-none resize-none placeholder:text-[#5c5c80]"
                       />
+                    </div>
+                  )}
+
+                  {/* Input Mode: VOICE */}
+                  {inputMode === 'voice' && (
+                    <div className="space-y-4 text-left animate-slide-in">
+                      {file && (file.type.startsWith('audio/') || file.name.includes('voice')) ? (
+                        /* Voice Memo Ready / Playback Card */
+                        <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-500/10 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                                <Mic className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <span>Voice Memo Ready</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    ATTACHED
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-[#9b9bbf] font-mono mt-0.5">
+                                  {(file.size / 1024).toFixed(1)} KB • {file.type || 'audio/webm'}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFile(null);
+                                addLog('> cleared voice memo');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-white/10 text-[#9b9bbf] hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete Recording"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Audio Player Preview */}
+                          <div className="p-3 rounded-xl bg-black/60 border border-purple-500/20">
+                            <audio controls src={file.data} className="w-full h-9 rounded" />
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center justify-between pt-1">
+                            <button
+                              type="button"
+                              onClick={startRecording}
+                              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold text-purple-300 flex items-center gap-1.5 cursor-pointer transition-all border border-purple-500/20"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Re-record Memo
+                            </button>
+                            <span className="text-[11px] font-mono text-purple-400/80">
+                              🔒 AES-256-GCM Encrypted
+                            </span>
+                          </div>
+                        </div>
+                      ) : isRecording ? (
+                        /* Active Recording View */
+                        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 space-y-5 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            <span className="relative flex h-3.5 w-3.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500"></span>
+                            </span>
+                            <span className="text-xs font-mono font-bold tracking-wider text-rose-300 uppercase">
+                              LIVE AUDIO RECORDING IN PROGRESS
+                            </span>
+                          </div>
+
+                          {/* Timer */}
+                          <div className="font-mono text-3xl font-black text-white tracking-widest">
+                            00:{recordingDuration < 10 ? `0${recordingDuration}` : recordingDuration}
+                            <span className="text-xs text-[#9b9bbf] font-normal ml-2">/ 01:00 MAX</span>
+                          </div>
+
+                          {/* Animated Equalizer Wave */}
+                          <div className="flex items-center justify-center gap-1.5 h-12 py-2">
+                            {[40, 75, 95, 60, 100, 85, 45, 90, 70, 100, 65, 80, 50, 95, 30].map((h, i) => (
+                              <div
+                                key={i}
+                                className="w-1.5 bg-gradient-to-t from-rose-500 to-purple-400 rounded-full animate-pulse"
+                                style={{
+                                  height: `${h}%`,
+                                  animationDelay: `${(i * 0.08).toFixed(2)}s`,
+                                  animationDuration: '0.6s'
+                                }}
+                              />
+                            ))}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={stopRecording}
+                            className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 cursor-pointer transition-all"
+                          >
+                            <Square className="w-4 h-4 fill-white" />
+                            Stop & Save Voice Memo
+                          </button>
+                        </div>
+                      ) : (
+                        /* Idle Voice Studio View */
+                        <div className="p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/50 bg-purple-500/5 text-center space-y-4 transition-all">
+                          <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto text-purple-400 shadow-inner">
+                            <Mic className="w-7 h-7" />
+                          </div>
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-white">Record Secure Voice Capsule</h4>
+                            <p className="text-xs text-[#9b9bbf] max-w-xs mx-auto">
+                              Record an encrypted voice memo from your microphone (Max 60s). Encrypted client-side.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={startRecording}
+                            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 mx-auto shadow-lg shadow-purple-600/30 cursor-pointer active:scale-95 transition-all"
+                          >
+                            <Mic className="w-4 h-4" />
+                            Start Voice Recording
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Input Mode: VIDEO */}
+                  {inputMode === 'video' && (
+                    <div className="space-y-4 text-left animate-slide-in">
+                      {file && (file.type.startsWith('video/') || file.name.includes('video')) ? (
+                        /* Video Capsule Ready / Preview Card */
+                        <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-500/10 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                                <Camera className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <span>Video Capsule Ready</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    ATTACHED
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-[#9b9bbf] font-mono mt-0.5">
+                                  {(file.size / 1024).toFixed(1)} KB • {file.type || 'video/webm'}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFile(null);
+                                addLog('> cleared video capsule');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-white/10 text-[#9b9bbf] hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete Recording"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Video Player Preview */}
+                          <div className="relative rounded-xl overflow-hidden bg-black/80 border border-purple-500/20 aspect-video flex items-center justify-center">
+                            <video
+                              controls
+                              playsInline
+                              src={file.data}
+                              className="w-full h-full object-contain rounded-xl"
+                            />
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center justify-between pt-1">
+                            <button
+                              type="button"
+                              onClick={startCamera}
+                              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold text-purple-300 flex items-center gap-1.5 cursor-pointer transition-all border border-purple-500/20"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Retake Video
+                            </button>
+                            <span className="text-[11px] font-mono text-purple-400/80">
+                              🔒 Client-Side AES-256-GCM
+                            </span>
+                          </div>
+                        </div>
+                      ) : isCameraActive ? (
+                        /* Live Viewfinder / Active Recording View */
+                        <div className="p-4 rounded-2xl border border-purple-500/30 bg-black/80 space-y-3">
+                          {/* Cyber Viewfinder with HUD */}
+                          <div className="relative rounded-xl overflow-hidden bg-black border border-purple-500/30 aspect-video flex items-center justify-center group">
+                            <video
+                              ref={videoLiveRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover transform -scale-x-100"
+                            />
+
+                            {/* Cyber HUD Overlays */}
+                            <div className="absolute inset-0 pointer-events-none p-3 flex flex-col justify-between">
+                              {/* Top HUD */}
+                              <div className="flex items-center justify-between">
+                                {isVideoRecording ? (
+                                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-rose-600/90 text-white font-mono text-[11px] font-bold tracking-wider animate-pulse shadow-lg">
+                                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                    REC 00:{videoRecordingDuration < 10 ? `0${videoRecordingDuration}` : videoRecordingDuration} / 00:30
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/60 border border-emerald-500/40 text-emerald-400 font-mono text-[10px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    VIEWFINDER READY
+                                  </div>
+                                )}
+                                <div className="text-[10px] font-mono text-purple-300/80 bg-black/60 px-2 py-0.5 rounded border border-white/10">
+                                  HD 24FPS • 640x480
+                                </div>
+                              </div>
+
+                              {/* Viewfinder Reticle / Corners */}
+                              <div className="flex justify-between items-center opacity-40 text-purple-400 font-mono text-xs">
+                                <span>┌</span>
+                                <span>┐</span>
+                              </div>
+                              <div className="flex justify-between items-center opacity-40 text-purple-400 font-mono text-xs">
+                                <span>└</span>
+                                <span>┘</span>
+                              </div>
+
+                              {/* Bottom HUD */}
+                              <div className="flex items-center justify-between text-[10px] font-mono text-[#9b9bbf]">
+                                <span>ZERO-KNOWLEDGE BUFFER</span>
+                                <span>MAX: 30s (~500KB)</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Viewfinder Controls */}
+                          <div className="flex items-center gap-2 pt-1">
+                            {isVideoRecording ? (
+                              <button
+                                type="button"
+                                onClick={stopVideoRecording}
+                                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 cursor-pointer transition-all"
+                              >
+                                <Square className="w-4 h-4 fill-white" />
+                                Stop & Save Video
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={startVideoRecording}
+                                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 cursor-pointer transition-all"
+                                >
+                                  <div className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                                  Record Video (30s Max)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={stopCamera}
+                                  className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#9b9bbf] hover:text-white transition-all cursor-pointer border border-white/10"
+                                  title="Turn Off Camera"
+                                >
+                                  <VideoOff className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        /* Idle Video Studio View */
+                        <div className="p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/50 bg-purple-500/5 text-center space-y-4 transition-all">
+                          <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto text-purple-400 shadow-inner">
+                            <Camera className="w-7 h-7" />
+                          </div>
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-white">Record Secure Video Capsule</h4>
+                            <p className="text-xs text-[#9b9bbf] max-w-xs mx-auto">
+                              Record an encrypted video message from your camera (Max 30s). Encrypted in browser.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 mx-auto shadow-lg shadow-purple-600/30 cursor-pointer active:scale-95 transition-all"
+                          >
+                            <Camera className="w-4 h-4" />
+                            Enable Camera & Record
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 

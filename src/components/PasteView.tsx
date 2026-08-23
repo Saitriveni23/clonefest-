@@ -6,7 +6,8 @@ import { reconstructKey } from '@/lib/sss';
 import { 
   Lock, Unlock, Clock, FileText, Calendar,
   Trash2, Download, Copy, Check, QrCode, ShieldCheck,
-  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu, Flame
+  Loader2, Printer, AlertTriangle, Key, Users2, Plus, Volume2, Cpu, Flame,
+  Camera, Video, Mic
 } from 'lucide-react';
 import { Toast, ToastType } from './Toast';
 import { Tooltip } from './Tooltip';
@@ -1413,44 +1414,127 @@ export function PasteView({ id }: PasteViewProps) {
         </div>
       </div>
 
-      {/* Decrypted File Attachment / Audio Voice Memo block */}
+      {/* Decrypted Video Capsule / Audio Voice Memo / File Attachment block */}
       {payload?.file && (
-        <div className="glass-panel rounded-2xl p-5 border-teal-500/20 bg-teal-500/5 animate-slide-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5 text-left flex-1">
-              <div className="w-12 h-12 rounded-xl bg-teal-500/10 flex items-center justify-center border border-teal-500/20">
-                {payload.file.name.startsWith('voice_memo.') ? <Volume2 className="w-6 h-6 text-teal-400" /> : <FileText className="w-6 h-6 text-teal-400" />}
+        <>
+          {payload.file.type.startsWith('video/') || payload.file.name.includes('video') ? (
+            /* Cybernetic Video Capsule Player */
+            <div className="glass-panel rounded-2xl p-5 sm:p-6 border-purple-500/30 bg-purple-500/5 animate-slide-in text-left space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30 text-purple-400">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        {payload.file.name.includes('classified') ? 'Decrypted Video Capsule' : payload.file.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        DECRYPTED
+                      </span>
+                    </div>
+                    <span className="text-xs text-[#9b9bbf] font-mono">
+                      {(payload.file.size / 1024).toFixed(1)} KB • {payload.file.type || 'video/webm'} • Zero-Knowledge Decrypted
+                    </span>
+                  </div>
+                </div>
+
+                <Tooltip text="Save the decrypted video file to your device." className="w-full sm:w-auto">
+                  <button
+                    onClick={handleDownloadFile}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-purple-500/30 text-xs font-mono font-bold text-purple-300 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Video
+                  </button>
+                </Tooltip>
               </div>
-              <div className="flex flex-col flex-1">
-                <span className="text-sm font-bold text-text-main truncate max-w-xs sm:max-w-md">
-                  {payload.file.name.startsWith('voice_memo.') ? 'Secure Voice Note Memo' : payload.file.name}
-                </span>
-                <span className="text-xs text-text-ghost">
-                  {(payload.file.size / 1024).toFixed(1)} KB • {payload.file.type || 'Unknown Filetype'}
-                </span>
-                {payload.file.name.startsWith('voice_memo.') && (
-                  <audio
-                    controls
-                    src={payload.file.data}
-                    className="mt-3.5 w-full max-w-md border border-teal-500/20 rounded-lg"
-                  />
-                )}
+
+              {/* Video Player Display */}
+              <div className="relative rounded-xl overflow-hidden bg-black/90 border border-purple-500/20 shadow-2xl flex items-center justify-center">
+                <video
+                  controls
+                  playsInline
+                  src={payload.file.data}
+                  className="w-full max-h-[440px] rounded-xl object-contain"
+                />
               </div>
             </div>
+          ) : payload.file.type.startsWith('audio/') || payload.file.name.includes('voice') || payload.file.name.startsWith('voice_memo.') ? (
+            /* Cybernetic Audio Voice Memo Player */
+            <div className="glass-panel rounded-2xl p-5 sm:p-6 border-teal-500/30 bg-teal-500/5 animate-slide-in text-left space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-teal-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center border border-teal-500/30 text-teal-400">
+                    <Volume2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        {payload.file.name.includes('classified') || payload.file.name.startsWith('voice_memo.') ? 'Decrypted Voice Memo' : payload.file.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                        DECRYPTED AUDIO
+                      </span>
+                    </div>
+                    <span className="text-xs text-[#9b9bbf] font-mono">
+                      {(payload.file.size / 1024).toFixed(1)} KB • {payload.file.type || 'audio/webm'} • Zero-Knowledge Decrypted
+                    </span>
+                  </div>
+                </div>
 
-            {!payload.file.name.startsWith('voice_memo.') && (
-              <Tooltip text="Save the decrypted file to your device." className="w-full sm:w-auto">
-                <button
-                  onClick={handleDownloadFile}
-                  className="w-full glass-panel sm:w-auto px-6 py-3 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 flex items-center justify-center gap-1.5 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Intel
-                </button>
-              </Tooltip>
-            )}
-          </div>
-        </div>
+                <Tooltip text="Save the decrypted voice note to your device." className="w-full sm:w-auto">
+                  <button
+                    onClick={handleDownloadFile}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-teal-500/30 text-xs font-mono font-bold text-teal-300 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Audio
+                  </button>
+                </Tooltip>
+              </div>
+
+              {/* Audio Controls */}
+              <div className="p-4 rounded-xl bg-black/60 border border-teal-500/20 space-y-3">
+                <audio
+                  controls
+                  src={payload.file.data}
+                  className="w-full rounded-lg"
+                />
+              </div>
+            </div>
+          ) : (
+            /* General Decrypted File Attachment */
+            <div className="glass-panel rounded-2xl p-5 border-teal-500/20 bg-teal-500/5 animate-slide-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5 text-left flex-1">
+                  <div className="w-12 h-12 rounded-xl bg-teal-500/10 flex items-center justify-center border border-teal-500/20">
+                    <FileText className="w-6 h-6 text-teal-400" />
+                  </div>
+                  <div className="flex flex-col flex-1">
+                    <span className="text-sm font-bold text-text-main truncate max-w-xs sm:max-w-md">
+                      {payload.file.name}
+                    </span>
+                    <span className="text-xs text-text-ghost font-mono">
+                      {(payload.file.size / 1024).toFixed(1)} KB • {payload.file.type || 'Unknown Filetype'}
+                    </span>
+                  </div>
+                </div>
+
+                <Tooltip text="Save the decrypted file to your device." className="w-full sm:w-auto">
+                  <button
+                    onClick={handleDownloadFile}
+                    className="w-full glass-panel sm:w-auto px-6 py-3 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 flex items-center justify-center gap-1.5 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Intel
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Decrypted Sketchboard Canvas Draw visual */}
