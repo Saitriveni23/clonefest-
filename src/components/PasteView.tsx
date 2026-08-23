@@ -1262,22 +1262,28 @@ export function PasteView({ id }: PasteViewProps) {
               </span>
             )}
             <span className="bg-btn-sec-bg px-2 py-0.5 rounded capitalize">
-              {payload?.format === 'plaintext' ? 'Plain Text' : payload?.format}
+              {payload?.file?.type?.startsWith('video/') || payload?.file?.name?.includes('video')
+                ? 'Video Capsule'
+                : payload?.file?.type?.startsWith('audio/') || payload?.file?.name?.includes('voice') || payload?.file?.name?.startsWith('voice_memo.')
+                ? 'Voice Memo'
+                : payload?.format === 'plaintext' ? 'Plain Text' : payload?.format}
             </span>
           </div>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2.5">
-          <Tooltip text="Copy the decrypted text to your clipboard." className="flex-1 sm:flex-initial">
-            <button
-              onClick={handleCopy}
-              className="w-full glass-panel flex items-center justify-center gap-1.5 px-4 py-2.5 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              {copied ? 'Copied' : 'Copy to Buffer'}
-            </button>
-          </Tooltip>
+          {payload?.text && payload.text.trim().length > 0 && (
+            <Tooltip text="Copy the decrypted text to your clipboard." className="flex-1 sm:flex-initial">
+              <button
+                onClick={handleCopy}
+                className="w-full glass-panel flex items-center justify-center gap-1.5 px-4 py-2.5 rounded border border-teal-500/30 text-xs font-mono font-semibold text-teal-400 hover:bg-white/5 active:scale-95 transition-all cursor-pointer uppercase"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied' : 'Copy to Buffer'}
+              </button>
+            </Tooltip>
+          )}
 
           <Tooltip text="Show a QR code of this page's URL, for opening it quickly on a phone." className="flex-1 sm:flex-initial">
             <button
@@ -1374,7 +1380,7 @@ export function PasteView({ id }: PasteViewProps) {
               
               <div className="bg-bg-main/70 border border-panel-border rounded-xl p-3 h-28 overflow-y-auto font-mono text-[9px] text-sky-300 space-y-1">
                 {simulatedScannerLogs.length === 0 ? (
-                  <span className="text-text-ghost">Click "Trigger Simulated Scan" to watch the camera assembler protocol decode the blinking loop...</span>
+                  <span className="text-text-ghost">Click &quot;Trigger Simulated Scan&quot; to watch the camera assembler protocol decode the blinking loop...</span>
                 ) : (
                   simulatedScannerLogs.map((log, i) => (
                     <div key={i}>{log}</div>
@@ -1390,29 +1396,31 @@ export function PasteView({ id }: PasteViewProps) {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="grid grid-cols-1 gap-6">
-        <div className="glass-panel rounded overflow-hidden flex flex-col">
-          {/* Top editor border bar */}
-          <div className="bg-btn-sec-bg px-6 py-3 border-b border-panel-border flex items-center justify-between">
-            <span className="text-xs font-mono text-text-muted uppercase tracking-wider">Decrypted Content</span>
-            <span className="text-[10px] text-emerald-400 font-mono font-semibold uppercase flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Decrypted Client-Side (Zero-Knowledge)
-            </span>
-          </div>
+      {/* Main Text Content Area — only rendered if text actually exists */}
+      {payload?.text && payload.text.trim().length > 0 && (
+        <div className="grid grid-cols-1 gap-6">
+          <div className="glass-panel rounded overflow-hidden flex flex-col">
+            {/* Top editor border bar */}
+            <div className="bg-btn-sec-bg px-6 py-3 border-b border-panel-border flex items-center justify-between">
+              <span className="text-xs font-mono text-text-muted uppercase tracking-wider">Decrypted Content</span>
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold uppercase flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                Decrypted Client-Side (Zero-Knowledge)
+              </span>
+            </div>
 
-          <div className={`p-6 md:p-8 overflow-x-auto min-h-[300px] ${payload?.format === 'code' ? 'code-viewer' : ''}`}>
-            {payload?.format === 'markdown' && renderMarkdown(meltText ? displayScrambledText : payload.text)}
-            {payload?.format === 'code' && renderCode(meltText ? displayScrambledText : payload.text)}
-            {payload?.format === 'plaintext' && (
-              <pre className="font-sans text-sm text-left text-text-main whitespace-pre-wrap leading-relaxed select-text">
-                {meltText ? displayScrambledText : payload.text}
-              </pre>
-            )}
+            <div className={`p-6 md:p-8 overflow-x-auto min-h-[140px] ${payload?.format === 'code' ? 'code-viewer' : ''}`}>
+              {payload?.format === 'markdown' && renderMarkdown(meltText ? displayScrambledText : payload.text)}
+              {payload?.format === 'code' && renderCode(meltText ? displayScrambledText : payload.text)}
+              {payload?.format === 'plaintext' && (
+                <pre className="font-sans text-sm text-left text-text-main whitespace-pre-wrap leading-relaxed select-text">
+                  {meltText ? displayScrambledText : payload.text}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Decrypted Video Capsule / Audio Voice Memo / File Attachment block */}
       {payload?.file && (
