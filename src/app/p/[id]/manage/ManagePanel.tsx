@@ -54,6 +54,26 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [now, setNow] = useState(0);
+  const [honeypotAlerts, setHoneypotAlerts] = useState<Array<{ ip: string; ua: string; time: number }>>([]);
+
+  // Poll honeypot alerts every 10 seconds
+  useEffect(() => {
+    const fetchHoneypotAlerts = async () => {
+      try {
+        const response = await fetch(`/api/pastes/${id}/honeypot`, { method: 'POST' });
+        if (response.ok) {
+          const data = await response.json();
+          setHoneypotAlerts(data.alerts || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch honeypot alerts:', err);
+      }
+    };
+
+    fetchHoneypotAlerts();
+    const interval = setInterval(fetchHoneypotAlerts, 10000);
+    return () => clearInterval(interval);
+  }, [id]);
 
   useEffect(() => {
     // Extract keys from URL hash fragment
@@ -399,6 +419,70 @@ export default function ManagePanel({ id }: ManagePanelProps) {
                       <td className="p-3">Incorrect Password Guess ({metadata.failed_attempts || 0}/{metadata.max_attempts})</td>
                       <td className="p-3 text-amber-400 font-bold">[ATTEMPT]</td>
                     </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Honeypot Decoy Trap Intruder Logs */}
+          <div className="glass-panel rounded-xl flex flex-col border-t-2 border-t-amber-500 bg-amber-950/5 animate-slide-in">
+            <div className="p-5 border-b border-panel-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className={`w-4 h-4 ${honeypotAlerts.length > 0 ? 'text-rose-500 animate-pulse' : 'text-amber-500'}`} />
+                <h3 className="text-sm font-bold text-text-main">Honeypot Decoy Intruder Alarm Console</h3>
+              </div>
+              <span className={`text-[9px] font-mono font-bold px-2 py-0.5 uppercase tracking-wider border rounded ${
+                honeypotAlerts.length > 0
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse'
+                  : 'bg-zinc-800 text-text-ghost border-panel-border'
+              }`}>
+                {honeypotAlerts.length > 0 ? `${honeypotAlerts.length} BREACHES` : 'DORMANT / SECURE'}
+              </span>
+            </div>
+            
+            {honeypotAlerts.length > 0 && (
+              <div className="p-4 bg-rose-500/5 border-b border-panel-border flex items-start gap-3 text-left animate-pulse">
+                <span className="text-rose-400 text-lg">🚨</span>
+                <div className="flex-1 text-[11px] leading-relaxed text-rose-300/90 font-mono">
+                  <span className="font-bold block uppercase tracking-wider text-rose-400 mb-0.5">WARNING: INTRUSION ATTEMPT RECORDED</span>
+                  Decoy link was accessed. The server successfully recorded the intruder's information and returned false credentials. Take necessary precautions.
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left font-mono text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-btn-sec-bg border-b border-panel-border text-text-ghost uppercase tracking-wider">
+                    <th className="p-3 font-medium">Time (UTC)</th>
+                    <th className="p-3 font-medium">IP Address</th>
+                    <th className="p-3 font-medium">Geographic Node</th>
+                    <th className="p-3 font-medium">User Agent</th>
+                  </tr>
+                </thead>
+                <tbody className="text-text-muted divide-y divide-white/5">
+                  {honeypotAlerts.length === 0 ? (
+                    <tr>
+                      <td className="p-3 text-center text-text-ghost" colSpan={4}>
+                        No dispatch intrusions recorded yet. Decoy trap is currently dormant.
+                      </td>
+                    </tr>
+                  ) : (
+                    honeypotAlerts.map((alert, i) => {
+                      // Generate a mock country based on IP or hash for espionage flair
+                      const countries = ['United States (US)', 'China (CN)', 'Germany (DE)', 'Russia (RU)', 'Netherlands (NL)', 'India (IN)'];
+                      const charCodeSum = alert.ip.split('.').reduce((acc: number, val: string) => acc + parseInt(val || '0', 10), 0);
+                      const mockGeo = countries[charCodeSum % countries.length];
+                      return (
+                        <tr key={i} className="hover:bg-rose-500/5 transition-colors">
+                          <td className="p-3 text-rose-300">{new Date(alert.time).toISOString()}</td>
+                          <td className="p-3 text-text-main font-bold select-all">{alert.ip}</td>
+                          <td className="p-3 text-amber-400 font-bold">{mockGeo}</td>
+                          <td className="p-3 text-text-ghost truncate max-w-xs" title={alert.ua}>{alert.ua}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

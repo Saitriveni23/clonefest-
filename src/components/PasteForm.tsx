@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { encryptData, generateKey } from '@/lib/crypto';
 import { splitKey } from '@/lib/sss';
 import { encodeTextInImage, decodeTextFromImage } from '@/lib/stego';
@@ -73,9 +75,27 @@ function scanForPii(text: string): string[] {
 }
 
 
-export function PasteForm() {
+export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direct' | 'threshold' | 'chat' | 'stego' | 'slack' }) {
+  const router = useRouter();
+
   // Method tab: direct paste vs advanced extensions
-  const [method, setMethod] = useState<'direct' | 'threshold' | 'chat' | 'stego' | 'slack'>('direct');
+  const [method, setMethod] = useState<'direct' | 'threshold' | 'chat' | 'stego' | 'slack'>(defaultMethod);
+
+  useEffect(() => {
+    setMethod(defaultMethod);
+  }, [defaultMethod]);
+
+  // Load user settings on mount
+  useEffect(() => {
+    try {
+      const savedExpiry = localStorage.getItem('cipherdrop:default-expiry');
+      if (savedExpiry) {
+        setExpiration(savedExpiry);
+      }
+    } catch (e) {
+      console.warn('Failed to load default retention settings:', e);
+    }
+  }, []);
 
   // Form input fields
   const [title, setTitle] = useState('');
@@ -116,6 +136,9 @@ export function PasteForm() {
   const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
   const [isDrawing, setIsDrawingLine] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Honeypot Trap states
+  const [isHoneypotTrapEnabled, setIsHoneypotTrapEnabled] = useState(false);
 
   // Rate-limiting and Geo-fencing options
   const [maxAttempts, setMaxAttempts] = useState('0');
@@ -217,7 +240,20 @@ export function PasteForm() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new (window as any).MediaRecorder(stream);
+      
+      // Query supported container formats
+      let selectedMimeType = '';
+      const types = ['audio/mp4', 'audio/aac', 'audio/webm', 'audio/ogg'];
+      for (const t of types) {
+        if (MediaRecorder.isTypeSupported(t)) {
+          selectedMimeType = t;
+          break;
+        }
+      }
+      
+      const options = selectedMimeType ? { mimeType: selectedMimeType } : undefined;
+      const recorder = new MediaRecorder(stream, options);
+      const actualMimeType = recorder.mimeType || selectedMimeType || 'audio/webm';
       audioChunksRef.current = [];
 
       recorder.ondataavailable = (e: any) => {
@@ -227,12 +263,13 @@ export function PasteForm() {
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         const reader = new FileReader();
         reader.onload = () => {
+          const extension = actualMimeType.split('/')[1]?.split(';')[0] || 'webm';
           setFile({
-            name: 'voice_memo.webm',
-            type: 'audio/webm',
+            name: `voice_memo.${extension}`,
+            type: actualMimeType,
             size: audioBlob.size,
             data: reader.result as string,
           });
@@ -556,6 +593,16 @@ export function PasteForm() {
         setSuccessMode('direct');
         triggerConfetti();
 
+        // Auto-copy recipient link if user settings preference is enabled
+        const autoCopy = localStorage.getItem('cipherdrop:autocopy') !== 'false';
+        if (autoCopy) {
+          navigator.clipboard.writeText(`${window.location.origin}/p/${data.id}#${keyHex}`)
+            .then(() => {
+              setToast({ message: 'Secure link generated and copied to clipboard!', type: 'success' });
+            })
+            .catch(() => {});
+        }
+
         addToHistory({
           id: data.id,
           title: title.trim() || 'Classified Text / Secrets',
@@ -789,12 +836,9 @@ export function PasteForm() {
           const Icon = tab.icon;
           return (
             <Tooltip key={tab.key} text={tab.tooltip} className="flex-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setMethod(tab.key as any);
-                  setSuccessMode(null);
-                }}
+              <Link
+                href={tab.key === 'direct' ? '/' : `/${tab.key}`}
+                onClick={() => setSuccessMode(null)}
                 className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                   method === tab.key
                     ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md'
@@ -803,7 +847,7 @@ export function PasteForm() {
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
-              </button>
+              </Link>
             </Tooltip>
           );
         })}
@@ -863,6 +907,31 @@ export function PasteForm() {
                 </button>
               </div>
             </div>
+
+            {/* Honeypot Decoy Trap Link */}
+            {isHoneypotTrapEnabled && (
+              <div className="space-y-1.5 text-left animate-slide-in">
+                <span className="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  3. Decoy Honeypot Trap Link (Silent Intruder Log)
+                </span>
+                <div className="flex bg-btn-sec-bg border border-amber-500/20 p-1 rounded-xl items-center justify-between">
+                  <span className="text-xs font-mono text-amber-400/90 truncate pl-3 pr-2 select-all">
+                    {directShareUrl.replace('#', '?trap=1#')}
+                  </span>
+                  <button
+                    onClick={() => handleCopyLink(directShareUrl.replace('#', '?trap=1#'))}
+                    className="p-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/15 text-amber-400 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="text-[9px] font-bold uppercase">Copy</span>
+                  </button>
+                </div>
+                <p className="text-[9px] text-text-ghost leading-normal">
+                  ⚠️ Share this trap link ONLY where you expect intruders (e.g. leaked emails, dummy files). If opened, it silently logs details and displays them in your command dashboard.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-2 flex justify-center gap-3">
@@ -1428,11 +1497,11 @@ export function PasteForm() {
                   <div className="flex items-center justify-between p-3.5 rounded-xl border border-teal-500/20 bg-teal-500/5 animate-slide-in">
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                        {file.name === 'voice_memo.webm' ? <Volume2 className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                        {file.name.startsWith('voice_memo.') ? <Volume2 className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                       </div>
                       <div className="flex flex-col text-left">
                         <span className="text-sm font-semibold text-text-main truncate max-w-xs sm:max-w-md">
-                          {file.name === 'voice_memo.webm' ? 'Secure Voice Note Memo' : file.name}
+                          {file.name.startsWith('voice_memo.') ? 'Secure Voice Note Memo' : file.name}
                         </span>
                         <span className="text-xs text-text-ghost">
                           {(file.size / 1024).toFixed(1)} KB • {file.type || 'Unknown Type'}
@@ -1854,6 +1923,33 @@ export function PasteForm() {
                     className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${biometricRequired ? 'bg-emerald-500' : 'bg-btn-sec-bg border border-panel-border'}`}
                   >
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${biometricRequired ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                {/* Honeypot Decoy Trap toggle container */}
+                <div 
+                  onClick={() => setIsHoneypotTrapEnabled(!isHoneypotTrapEnabled)}
+                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                    isHoneypotTrapEnabled 
+                      ? 'bg-rose-500/10 border-rose-500/40 text-rose-200 shadow-sm' 
+                      : 'bg-zinc-950/40 border-zinc-800 hover:border-zinc-700 text-zinc-400'
+                  }`}
+                >
+                  <label className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer font-mono">
+                    <ShieldAlert className="w-4 h-4 text-rose-400" />
+                    Deploy Decoy Honeypot Trap
+                    <span className="text-[10px] text-zinc-500 font-normal ml-1 font-sans">(Silent alarm access link)</span>
+                  </label>
+                  <button
+                    id="toggle-honeypot-trap"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsHoneypotTrapEnabled(!isHoneypotTrapEnabled);
+                    }}
+                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${isHoneypotTrapEnabled ? 'bg-rose-500' : 'bg-btn-sec-bg border border-panel-border'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${isHoneypotTrapEnabled ? 'left-5' : 'left-0.5'}`} />
                   </button>
                 </div>
               </div>

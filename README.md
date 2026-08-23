@@ -1,8 +1,8 @@
-# 🔐 PrivateBin (CipherDrop Fork)
+# 🔐 CipherDrop
 
 Current version: 2.0.6
 
-**PrivateBin** is a minimalist, open source online pastebin where the server has zero knowledge of stored data. Data is encrypted and decrypted in the browser using 256bit AES in Galois Counter mode.
+**CipherDrop** is a minimalist, open source online pastebin where the server has zero knowledge of stored data. Data is encrypted and decrypted in the browser using 256bit AES in Galois Counter mode.
 
 This is a fork of ZeroBin, originally developed by Sébastien Sauvage. PrivateBin was refactored to allow easier and cleaner extensions and has many additional features.
 

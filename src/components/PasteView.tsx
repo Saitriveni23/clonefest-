@@ -107,6 +107,12 @@ export function PasteView({ id }: PasteViewProps) {
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
+  // Self-Destruct states
+  const [burnCountdown, setBurnCountdown] = useState<number | null>(null);
+  const [vaporized, setVaporized] = useState(false);
+  const [meltText, setMeltText] = useState(false);
+  const [displayScrambledText, setDisplayScrambledText] = useState('');
+
   // Fetch encrypted paste from server
   useEffect(() => {
     // Extract key from URL hash fragment
@@ -116,7 +122,9 @@ export function PasteView({ id }: PasteViewProps) {
 
     const fetchPaste = async () => {
       try {
-        const response = await fetch(`/api/pastes/${id}`);
+        const isTrap = window.location.search.includes('trap=1');
+        const url = isTrap ? `/api/pastes/${id}/honeypot` : `/api/pastes/${id}`;
+        const response = await fetch(url);
         if (!response.ok) {
           if (response.status === 404) {
             setErrorMsg('This paste does not exist, has expired, or was already burned.');
@@ -128,6 +136,20 @@ export function PasteView({ id }: PasteViewProps) {
         }
 
         const data = await response.json();
+
+        if (data.is_honeypot) {
+          // Honeypot Decoy Mode Active: Load fake credentials to satisfy the intruder
+          const decoyPayload = {
+            verification: 'cipherdrop-verify',
+            title: 'CLASSIFIED CORE SYSTEM ACCESS KEYS',
+            text: `SYSTEM ACCESS NODE: core-db-prod.internal.agency.net\nPORT: 5432\nDB_NAME: agency_classified_records\nUSER: postgres_admin_root\nPASS: cd_prod_7719_99_A8F\nTOKEN: xoxb-44919-agency-super-token-991f\n\nSSH PRIVATE KEY:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA09d1y3zEDECN9WfG7lVp9t2z3Xp82x6q7Jv4v8l39a7b7n1e8f2g\nB1c9d8m7a5f6e8d9q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c2v3b4n5m\n-----END RSA PRIVATE KEY-----\n\nSECURITY CONFIGURATION FLAGS:\n- SECURE_SHELL: ON\n- TRUST_IP_RANGE: 10.0.0.0/8\n\nNOTICE: This server node is monitored. Logins from unauthorized external nodes are logged.`,
+            format: 'code',
+            language: 'markdown'
+          };
+          setPayload(decoyPayload as any);
+          setIsLoading(false);
+          return;
+        }
 
         // Check time-release lock state
         if (data.is_time_released && data.locked) {
@@ -227,6 +249,112 @@ export function PasteView({ id }: PasteViewProps) {
     
     return () => clearInterval(interval);
   }, [isAirGapOpen, qrChunks]);
+
+  // Synthesize warning tones using Web Audio API
+  const playDestructSound = (final: boolean = false) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      
+      if (final) {
+        // Final molecular vaporization sweep
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 1.5);
+        
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 1.5);
+      } else {
+        // Warning beep
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, ctx.currentTime);
+        osc.frequency.setValueAtTime(1040, ctx.currentTime + 0.08);
+        
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+      }
+    } catch (e) {
+      console.warn('Web Audio Warning Siren disabled:', e);
+    }
+  };
+
+  // Start countdown on decryption if burn after read
+  useEffect(() => {
+    if (payload && burnAfterRead && burnCountdown === null) {
+      setBurnCountdown(10);
+    }
+  }, [payload, burnAfterRead, burnCountdown]);
+
+  // Handle countdown progression and warning triggers
+  useEffect(() => {
+    if (burnCountdown === null || burnCountdown < 0) return;
+
+    if (burnCountdown === 0) {
+      setMeltText(true);
+      playDestructSound(true);
+
+      const t = setTimeout(() => {
+        setVaporized(true);
+        setPayload(null);
+      }, 1500); // 1.5s melting duration
+
+      return () => clearTimeout(t);
+    }
+
+    playDestructSound(false);
+
+    const timer = setTimeout(() => {
+      setBurnCountdown(prev => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [burnCountdown]);
+
+  // Terminal melting text scrambler effect
+  useEffect(() => {
+    if (!meltText || !payload) return;
+
+    const chars = '@#$%&*+?/';
+    const original = payload.text;
+    const length = original.length;
+    let step = 0;
+
+    const interval = setInterval(() => {
+      step++;
+      let scrambled = '';
+      for (let i = 0; i < length; i++) {
+        const rand = Math.random();
+        if (i < (step / 15) * length) {
+          scrambled += rand > 0.45 ? ' ' : chars[Math.floor(Math.random() * chars.length)];
+        } else {
+          scrambled += original[i];
+        }
+      }
+      setDisplayScrambledText(scrambled);
+      if (step >= 15) {
+        clearInterval(interval);
+      }
+    }, 85);
+
+    return () => clearInterval(interval);
+  }, [meltText, payload]);
 
   const handleOpenAirGap = () => {
     const shareUrl = window.location.href;
@@ -1013,6 +1141,28 @@ export function PasteView({ id }: PasteViewProps) {
     );
   }
 
+  if (vaporized) {
+    return (
+      <div className="max-w-md mx-auto py-12 px-6 glass-panel rounded-2xl border-rose-500/20 bg-rose-500/5 text-center space-y-6">
+        <div className="w-14 h-14 rounded-full bg-rose-500/10 flex items-center justify-center mx-auto border border-rose-500/20">
+          <span className="text-3xl animate-bounce">🔥</span>
+        </div>
+        <div className="space-y-2 text-center">
+          <h3 className="text-lg font-bold text-text-main">CLASSIFIED PAYLOAD VAPORIZED</h3>
+          <p className="text-xs text-text-muted leading-relaxed">
+            This burn-after-reading paste has been successfully decrypted, read, and permanently deleted from both database storage and local memory.
+          </p>
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl font-mono text-xs text-rose-300">
+            SECURE PURGE COMPLETE // 0 BYTES REMAINING
+          </div>
+        </div>
+        <a href="/" className="inline-block btn-gradient font-bold px-6 py-3 rounded-xl text-xs shadow-md transition-all cursor-pointer">
+          Create New Paste
+        </a>
+      </div>
+    );
+  }
+
   // 5. Main decrypted paste view
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -1026,10 +1176,18 @@ export function PasteView({ id }: PasteViewProps) {
 
       {/* Warning banner for burn after read */}
       {burnAfterRead && (
-        <div className="glass-panel border-rose-500/30 bg-rose-500/10 px-4 py-3 rounded flex items-center gap-3 text-left animate-pulse">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-          <span className="text-xs font-mono font-semibold text-rose-300 uppercase tracking-wide">
-            Self-Destruct Sequence Initiated: Data Will Be Vaporized Upon Closing This Session.
+        <div className="glass-panel border-rose-500/30 bg-rose-500/10 px-4 py-3 rounded flex items-center gap-3 text-left">
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 animate-bounce" />
+          <span className="text-xs font-mono font-semibold text-rose-300 uppercase tracking-wide flex-1">
+            {burnCountdown !== null && burnCountdown > 0 ? (
+              <span className="flex items-center gap-2">
+                🚨 SECURE DECRYPTION INITIATED: Self-Destruct in <strong className="text-white text-sm bg-rose-600 px-2 py-0.5 rounded animate-pulse">{burnCountdown}s</strong>! Copy now!
+              </span>
+            ) : burnCountdown === 0 ? (
+              <span>🔥 INITIATING MOLECULAR VAPORIZATION PURGE PROTOCOL...</span>
+            ) : (
+              <span>Self-Destruct Sequence Initiated: Data Will Be Vaporized Upon Closing This Session.</span>
+            )}
           </span>
         </div>
       )}
@@ -1196,11 +1354,11 @@ export function PasteView({ id }: PasteViewProps) {
           </div>
 
           <div className={`p-6 md:p-8 overflow-x-auto min-h-[300px] ${payload?.format === 'code' ? 'code-viewer' : ''}`}>
-            {payload?.format === 'markdown' && renderMarkdown(payload.text)}
-            {payload?.format === 'code' && renderCode(payload.text)}
+            {payload?.format === 'markdown' && renderMarkdown(meltText ? displayScrambledText : payload.text)}
+            {payload?.format === 'code' && renderCode(meltText ? displayScrambledText : payload.text)}
             {payload?.format === 'plaintext' && (
               <pre className="font-sans text-sm text-left text-text-main whitespace-pre-wrap leading-relaxed select-text">
-                {payload.text}
+                {meltText ? displayScrambledText : payload.text}
               </pre>
             )}
           </div>
@@ -1213,16 +1371,16 @@ export function PasteView({ id }: PasteViewProps) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 text-left flex-1">
               <div className="w-12 h-12 rounded-xl bg-teal-500/10 flex items-center justify-center border border-teal-500/20">
-                {payload.file.name === 'voice_memo.webm' ? <Volume2 className="w-6 h-6 text-teal-400" /> : <FileText className="w-6 h-6 text-teal-400" />}
+                {payload.file.name.startsWith('voice_memo.') ? <Volume2 className="w-6 h-6 text-teal-400" /> : <FileText className="w-6 h-6 text-teal-400" />}
               </div>
               <div className="flex flex-col flex-1">
                 <span className="text-sm font-bold text-text-main truncate max-w-xs sm:max-w-md">
-                  {payload.file.name === 'voice_memo.webm' ? 'Secure Voice Note Memo' : payload.file.name}
+                  {payload.file.name.startsWith('voice_memo.') ? 'Secure Voice Note Memo' : payload.file.name}
                 </span>
                 <span className="text-xs text-text-ghost">
                   {(payload.file.size / 1024).toFixed(1)} KB • {payload.file.type || 'Unknown Filetype'}
                 </span>
-                {payload.file.name === 'voice_memo.webm' && (
+                {payload.file.name.startsWith('voice_memo.') && (
                   <audio
                     controls
                     src={payload.file.data}
@@ -1232,7 +1390,7 @@ export function PasteView({ id }: PasteViewProps) {
               </div>
             </div>
 
-            {payload.file.name !== 'voice_memo.webm' && (
+            {!payload.file.name.startsWith('voice_memo.') && (
               <Tooltip text="Save the decrypted file to your device." className="w-full sm:w-auto">
                 <button
                   onClick={handleDownloadFile}

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ThemeToggle } from './ThemeToggle';
 import { Tooltip } from './Tooltip';
 import { History, Settings, Trash2, ExternalLink, X, ShieldAlert } from 'lucide-react';
 
@@ -125,15 +124,6 @@ export function Header() {
             <span className="absolute -bottom-[2px] left-0 w-full h-[2px] bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)]" />
           </Link>
           <button
-            onClick={() => {
-              loadHistory();
-              setIsArchiveOpen(true);
-            }}
-            className="font-sans text-base font-medium text-text-ghost hover:text-text-main cursor-pointer transition-colors"
-          >
-            Archive
-          </button>
-          <button
             onClick={() => setIsSettingsOpen(true)}
             className="font-sans text-base font-medium text-text-ghost hover:text-text-main cursor-pointer transition-colors"
           >
@@ -143,9 +133,6 @@ export function Header() {
 
         <div className="flex items-center gap-4 shrink-0">
           <UtcClock />
-          <Tooltip text="Switch between light and dark appearance">
-            <ThemeToggle />
-          </Tooltip>
           <div className="hidden md:flex items-center px-3 py-1.5 bg-rose-500/10 border border-rose-500/30">
             <span className="font-mono text-[10px] text-rose-400 uppercase tracking-wider">TOP SECRET // CLASSIFIED</span>
           </div>
@@ -155,10 +142,13 @@ export function Header() {
       {/* Archive Modal */}
       {isArchiveOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="glass-panel max-w-2xl w-full p-6 space-y-6 text-left border-teal-500/20 bg-zinc-950/95 relative rounded-2xl max-h-[85vh] flex flex-col">
+          <div 
+            className="glass-panel max-w-2xl w-full p-6 space-y-6 text-left border-teal-500/20 relative rounded-2xl max-h-[85vh] flex flex-col shadow-2xl"
+            style={{ backgroundColor: '#090b11' }}
+          >
             <button
               onClick={() => setIsArchiveOpen(false)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 font-bold p-1 bg-zinc-900 rounded-lg cursor-pointer flex items-center justify-center"
+              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 font-bold p-1 bg-zinc-900 rounded-lg cursor-pointer flex items-center justify-center border border-panel-border"
             >
               <X className="w-5 h-5" />
             </button>
@@ -225,18 +215,26 @@ export function Header() {
               )}
             </div>
 
-            {historyItems.length > 0 && (
-              <div className="border-t border-zinc-800 pt-4 flex justify-between items-center">
+            <div className="border-t border-zinc-800 pt-4 flex justify-between items-center">
+              {historyItems.length > 0 ? (
                 <button
                   onClick={clearHistory}
-                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15 text-[10px] font-bold text-rose-400 cursor-pointer flex items-center gap-1.5"
+                  className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15 text-[10px] font-bold text-rose-400 cursor-pointer flex items-center gap-1.5 font-mono uppercase"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  WIPE ALL SECRETS DISPATCH HISTORY
+                  Wipe Dispatch History
                 </button>
-                <span className="text-[10px] text-zinc-600 font-mono">COUNT: {historyItems.length} ITEMS</span>
-              </div>
-            )}
+              ) : (
+                <span className="text-[10px] text-zinc-600 font-mono">COUNT: 0 ITEMS</span>
+              )}
+              
+              <button
+                onClick={() => setIsArchiveOpen(false)}
+                className="px-4 py-2 bg-btn-sec-bg hover:bg-btn-sec-hover border border-panel-border text-[10px] font-bold text-text-main rounded-xl cursor-pointer font-mono uppercase transition-all active:scale-95"
+              >
+                Back to Terminal
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -244,10 +242,13 @@ export function Header() {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="glass-panel max-w-md w-full p-6 space-y-6 text-left border-zinc-800 bg-zinc-950/95 relative rounded-2xl">
+          <div 
+            className="glass-panel max-w-md w-full p-6 space-y-6 text-left border-zinc-800 relative rounded-2xl shadow-2xl"
+            style={{ backgroundColor: '#090b11' }}
+          >
             <button
               onClick={() => setIsSettingsOpen(false)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 font-bold p-1 bg-zinc-900 rounded-lg cursor-pointer flex items-center justify-center"
+              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 font-bold p-1 bg-zinc-900 rounded-lg cursor-pointer flex items-center justify-center border border-panel-border"
             >
               <X className="w-5 h-5" />
             </button>
