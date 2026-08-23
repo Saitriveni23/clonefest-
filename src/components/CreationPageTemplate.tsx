@@ -97,6 +97,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const videoRecorderRef = useRef<any>(null);
   const videoChunksRef = useRef<Blob[]>([]);
   const videoTimerRef = useRef<any>(null);
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // System Log state
   const [logs, setLogs] = useState<string[]>([
@@ -392,6 +393,9 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
 
   const stopVideoRecording = () => {
     if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+      try {
+        videoRecorderRef.current.requestData();
+      } catch (e) {}
       videoRecorderRef.current.stop();
       setIsVideoRecording(false);
       if (videoTimerRef.current) {
@@ -399,6 +403,28 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
         videoTimerRef.current = null;
       }
     }
+  };
+
+  const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploaded = e.target.files?.[0];
+    if (!uploaded) return;
+    if (uploaded.size > 700 * 1024) {
+      setToast({ message: `Video must be under 700KB (Selected: ${(uploaded.size / 1024).toFixed(0)}KB).`, type: 'error' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFile({
+        name: uploaded.name,
+        type: uploaded.type || 'video/mp4',
+        size: uploaded.size,
+        data: reader.result as string
+      });
+      addLog(`> attached video file: ${uploaded.name} (${(uploaded.size / 1024).toFixed(1)} KB)`);
+      setToast({ message: `Video "${uploaded.name}" attached successfully!`, type: 'success' });
+      stopCamera();
+    };
+    reader.readAsDataURL(uploaded);
   };
 
   // Load Archive from local storage
@@ -1700,23 +1726,42 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                       ) : (
                         /* Idle Video Studio View */
                         <div className="p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/50 bg-purple-500/5 text-center space-y-4 transition-all">
+                          <input
+                            ref={videoFileInputRef}
+                            type="file"
+                            accept="video/*,.mp4,.webm,.mov,.mkv"
+                            className="hidden"
+                            onChange={handleVideoFileUpload}
+                          />
+
                           <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto text-purple-400 shadow-inner">
                             <Camera className="w-7 h-7" />
                           </div>
                           <div className="space-y-1">
-                            <h4 className="text-sm font-bold text-white">Record Secure Video Capsule</h4>
+                            <h4 className="text-sm font-bold text-white">Record or Attach Secure Video Capsule</h4>
                             <p className="text-xs text-[#9b9bbf] max-w-xs mx-auto">
-                              Record an encrypted video message from your camera (Max 30s). Encrypted in browser.
+                              Record live from your camera (Max 30s) or upload an existing video clip (Max 700KB).
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={startCamera}
-                            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 mx-auto shadow-lg shadow-purple-600/30 cursor-pointer active:scale-95 transition-all"
-                          >
-                            <Camera className="w-4 h-4" />
-                            Enable Camera & Record
-                          </button>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+                            <button
+                              type="button"
+                              onClick={startCamera}
+                              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 cursor-pointer active:scale-95 transition-all"
+                            >
+                              <Camera className="w-4 h-4" />
+                              <span>Enable Camera & Record</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => videoFileInputRef.current?.click()}
+                              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold flex items-center justify-center gap-2 border border-purple-500/30 cursor-pointer active:scale-95 transition-all"
+                            >
+                              <Upload className="w-4 h-4 text-purple-400" />
+                              <span>Upload Video File (700KB)</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
