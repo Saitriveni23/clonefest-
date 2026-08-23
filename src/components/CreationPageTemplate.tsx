@@ -7,7 +7,7 @@ import { splitKey } from '@/lib/sss';
 import {
   ShieldCheck, Lock, Unlock, KeyRound, Flame, EyeOff, Radio,
   PenLine, SlidersHorizontal, Link2, ChevronRight, Copy, Check,
-  QrCode, ArrowRight, ShieldAlert, FileText, Code, Upload, X,
+  QrCode, ArrowRight, ArrowLeft, ShieldAlert, FileText, Code, Upload, X,
   Trash2, Search, MoreHorizontal, Clock, RefreshCw, AlertTriangle,
   Mic, Square, Volume2, Bot, Sparkles, ExternalLink, Terminal as TerminalIcon,
   Video, VideoOff, Camera, RotateCcw
@@ -15,6 +15,8 @@ import {
 import confetti from 'canvas-confetti';
 import { Toast, ToastType } from './Toast';
 import { Tooltip } from './Tooltip';
+import { HeroLoadingIntro } from './HeroLoadingIntro';
+import { SecurityRecommendationEngine, SecurityConfig } from './SecurityRecommendationEngine';
 
 interface CreationPageTemplateProps {
   defaultMethod?: 'direct' | 'threshold' | 'chat' | 'stego' | 'slack';
@@ -49,6 +51,12 @@ async function hashSha256(text: string): Promise<string> {
 
 export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageTemplateProps) {
   const [activeTab, setActiveTab] = useState<'landing' | 'terminal' | 'archive' | 'settings'>('landing');
+
+  // Hero Intro loading animation (5-frame revolving animation on initial load)
+  const [showHeroIntro, setShowHeroIntro] = useState(true);
+
+  // Security Recommendation Engine wizard modal
+  const [showRecommendationEngine, setShowRecommendationEngine] = useState(false);
 
   // Terminal mode: Text vs File vs Code vs Voice vs Video
   const [inputMode, setInputMode] = useState<'text' | 'file' | 'code' | 'voice' | 'video'>('text');
@@ -749,7 +757,10 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
               <div className="pt-2 flex flex-col items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('terminal')}
+                  onClick={() => {
+                    setActiveTab('terminal');
+                    setShowRecommendationEngine(true);
+                  }}
                   className="btn-primary px-8 py-4 rounded-xl text-base font-bold flex items-center gap-3 shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
                   style={{
                     background: 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)',
@@ -910,12 +921,33 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
           <div className="space-y-6 animate-slide-up">
             {/* Header row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4" style={{ borderColor: 'rgba(120, 80, 255, 0.12)' }}>
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight uppercase">TERMINAL</h1>
-                <p className="text-xs text-[#9b9bbf] mt-0.5">Create a new encrypted capsule</p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('landing')}
+                  className="btn-ghost px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-[#9b9bbf] hover:text-white hover:bg-white/10 transition-all cursor-pointer border border-white/5"
+                  title="Return to Welcome Home Page"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Back to Home</span>
+                </button>
+
+                <div className="border-l border-white/10 pl-3">
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">TERMINAL</h1>
+                  <p className="text-[11px] text-[#9b9bbf]">Create a new encrypted capsule</p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowRecommendationEngine(true)}
+                  className="btn-ghost px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-purple-300 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all cursor-pointer shadow-sm"
+                  title="Open 6-Step Guided Security Advisor"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                  <span>Security Advisor</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('archive')}
@@ -2115,6 +2147,37 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
             </button>
           </div>
         </div>
+      )}
+
+      {/* Hero Loading Intro 5-Frame Revolving Animation on Initial Load */}
+      {showHeroIntro && (
+        <HeroLoadingIntro onComplete={() => setShowHeroIntro(false)} />
+      )}
+
+      {/* 6-Step Security Recommendation Engine Wizard */}
+      {showRecommendationEngine && (
+        <SecurityRecommendationEngine
+          onApplyRecommendation={(config: SecurityConfig) => {
+            setInputMode(config.inputMode);
+            setBurnAfterReading(config.burnAfterReading);
+            setExpiryOption(config.expiryOption);
+            setPasswordProtection(config.passwordProtection);
+            setParanoidMode(config.paranoidMode);
+            setShowRecommendationEngine(false);
+            addLog(`> applied security advisor configuration`);
+            addLog(`  mode: [${config.inputMode.toUpperCase()}] | burn: [${config.burnAfterReading ? 'YES' : 'NO'}] | expiry: [${config.expiryOption}s]`);
+            setToast({ message: 'Security recommendations applied!', type: 'success' });
+          }}
+          onCustomizeAll={() => {
+            setShowRecommendationEngine(false);
+            addLog(`> customized fields mode enabled`);
+            setToast({ message: 'All fields unlocked for custom configuration.', type: 'info' });
+          }}
+          onSkip={() => {
+            setShowRecommendationEngine(false);
+            addLog(`> skipped security advisor (manual mode)`);
+          }}
+        />
       )}
 
       {/* Footer */}
