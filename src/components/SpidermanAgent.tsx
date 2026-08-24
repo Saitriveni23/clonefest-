@@ -207,45 +207,45 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
               xmlns="http://www.w3.org/2000/svg"
             >
               {/* 1. TOP CEILING ANCHOR SPLAT */}
-              <ellipse cx="38" cy="4" rx="14" ry="4" fill="rgba(192, 132, 252, 0.4)" />
-              <circle cx="38" cy="4" r="3" fill="#ffffff" />
+              <ellipse cx="34" cy="4" rx="14" ry="4" fill="rgba(192, 132, 252, 0.4)" />
+              <circle cx="34" cy="4" r="3" fill="#ffffff" />
 
-              {/* 2. GLOWING SPIDER SILK ROPE (Drops directly into Left Hand at x:38, y:138) */}
+              {/* 2. GLOWING SPIDER SILK ROPE (Drops directly into Left Hand at x:34, y:140) */}
               <line
-                x1="38"
+                x1="34"
                 y1="4"
-                x2="38"
-                y2="140"
+                x2="34"
+                y2="142"
                 stroke="#ffffff"
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 className="drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]"
               />
               <line
-                x1="38"
+                x1="34"
                 y1="4"
-                x2="38"
-                y2="140"
+                x2="34"
+                y2="142"
                 stroke="#c084fc"
                 strokeWidth="1.5"
                 strokeDasharray="4 3"
                 opacity="0.8"
               />
 
-              {/* 3. LEFT HAND & ARM (Full Length Equal to Right Arm) */}
-              {/* Left Hand Knuckles wrapped around rope */}
-              <ellipse cx="38" cy="138" rx="5.5" ry="5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-              {/* Left Arm extending from Shoulder (x:46, y:176) up to Hand (x:38, y:138) */}
-              <path d="M 33 140 L 26 156 L 38 178 L 48 174 L 43 140 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+              {/* 3. LEFT HAND & ARM (Exact Symmetrical Mirror of Right Arm) */}
+              {/* Left Arm extending from Left Shoulder (x:48, y:176) to Hand (x:34, y:140) */}
+              <path d="M 48 176 L 36 160 L 28 144 L 36 140 L 42 154 L 54 170 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+              {/* Left Hand Gripped around rope */}
+              <ellipse cx="34" cy="140" rx="5" ry="4.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
 
-              {/* 4. RIGHT ARM & HAND WAVING (Equal Length Reach) */}
+              {/* 4. RIGHT HAND & ARM WAVING (Exact Symmetrical Mirror of Left Arm) */}
               <g className="animate-spidey-wave">
-                {/* Right Arm reaching UP & OUT */}
-                <path d="M 76 176 L 90 162 L 98 144 L 92 140 L 84 154 L 70 170 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                {/* Right Arm extending from Right Shoulder (x:76, y:176) to Hand (x:90, y:140) */}
+                <path d="M 76 176 L 88 160 L 96 144 L 88 140 L 82 154 L 70 170 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
                 {/* Right Waving Palm */}
-                <ellipse cx="98" cy="144" rx="5.5" ry="5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                <ellipse cx="90" cy="140" rx="5" ry="4.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
                 {/* Waving Fingers */}
-                <path d="M 96 140 L 98 134 M 99 140 L 102 135 M 101 142 L 106 138 M 95 144 L 93 142" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+                <path d="M 88 136 L 90 130 M 91 136 L 94 131 M 93 138 L 98 134 M 87 140 L 85 138" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
               </g>
 
               {/* 5. HEAD & SPIDER MASK (Centered and Completely Unobstructed) */}
