@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ShieldCheck, Sun, Moon, Lock } from 'lucide-react';
 
 interface HeaderProps {
@@ -15,6 +15,7 @@ export function Header({
   onTabChange,
   statusText = 'ENCRYPTED & READY'
 }: HeaderProps) {
+  const router = useRouter();
   const [isLightMode, setIsLightMode] = useState(false);
 
   const toggleTheme = () => {
@@ -25,6 +26,18 @@ export function Header({
         document.documentElement.classList.add('light-theme');
       } else {
         document.documentElement.classList.remove('light-theme');
+      }
+    }
+  };
+
+  const handleNav = (tab: 'landing' | 'terminal' | 'archive' | 'settings') => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      if (tab === 'landing') {
+        router.push('/');
+      } else {
+        router.push(`/?tab=${tab}`);
       }
     }
   };
@@ -42,7 +55,7 @@ export function Header({
         {/* Logo */}
         <button
           type="button"
-          onClick={() => onTabChange ? onTabChange('landing') : undefined}
+          onClick={() => handleNav('landing')}
           className="flex items-center gap-2.5 shrink-0 group cursor-pointer bg-transparent border-0 text-left"
         >
           <div
@@ -67,7 +80,7 @@ export function Header({
               <button
                 key={tab}
                 type="button"
-                onClick={() => onTabChange?.(tab)}
+                onClick={() => handleNav(tab)}
                 className={`relative px-3.5 sm:px-5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold capitalize transition-all cursor-pointer ${
                   isActive
                     ? 'text-white shadow-lg'

@@ -491,7 +491,21 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
 
   useEffect(() => {
     loadArchive();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'archive' || tabParam === 'settings' || tabParam === 'terminal' || tabParam === 'landing') {
+        setActiveTab(tabParam as any);
+        setShowHeroIntro(false);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'archive') {
+      loadArchive();
+    }
+  }, [activeTab]);
 
   // Append system log
   const addLog = (line: string) => {
