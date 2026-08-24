@@ -368,7 +368,7 @@ body {
 }
 
 .animate-spidey-wave {
-  transform-origin: 66px 44px;
+  transform-origin: 64px 54px;
   animation: spidey-wave 0.9s ease-in-out infinite;
 }
 

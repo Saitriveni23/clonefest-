@@ -222,76 +222,76 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                {/* 1. Web strand continuation into left gripping hand */}
-                <line x1="50" y1="0" x2="50" y2="14" stroke="#ffffff" strokeWidth="3" opacity="0.95" />
+                {/* 1. Web strand continuation straight into left gripping hand */}
+                <line x1="28" y1="0" x2="28" y2="30" stroke="#ffffff" strokeWidth="3" opacity="0.95" />
 
-                {/* 2. LEFT HAND & ARM FIRMLY HOLDING THE ROPE */}
+                {/* 2. LEFT ARM & HAND HOLDING THE ROPE (Cleanly to the Left of Head) */}
                 {/* Left Hand Gripping the webline */}
-                <ellipse cx="50" cy="12" rx="4.5" ry="3.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-                {/* Left Arm extending from shoulder to webline */}
-                <path d="M 48 14 L 34 32 L 40 40 L 52 18 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                <ellipse cx="28" cy="28" rx="4.5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                {/* Left Arm extending from left shoulder (x:36, y:56) up to hand (x:28, y:28) */}
+                <path d="M 26 30 L 34 56 L 42 54 L 32 26 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
 
-                {/* 3. RIGHT HAND & ARM WAVING TO SAY "HIEE!" */}
-                <g className="animate-spidey-wave origin-[66px_44px]">
-                  {/* Right Arm reaching up & out */}
-                  <path d="M 64 42 L 78 28 L 86 16 L 80 12 L 72 24 L 60 38 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-                  {/* Right Waving Hand Palm */}
-                  <ellipse cx="85" cy="14" rx="5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                {/* 3. RIGHT ARM & HAND WAVING (Cleanly to the Right of Head) */}
+                <g className="animate-spidey-wave">
+                  {/* Right Arm extending from right shoulder (x:64, y:54) up-right */}
+                  <path d="M 64 54 L 78 40 L 86 28 L 80 24 L 72 36 L 58 50 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                  {/* Right Waving Palm */}
+                  <ellipse cx="85" cy="26" rx="5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
                   {/* Waving Fingers */}
-                  <path d="M 83 10 L 85 5 M 86 10 L 89 6 M 88 12 L 92 9 M 82 14 L 80 12" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M 83 22 L 85 17 M 86 22 L 89 18 M 88 24 L 93 21 M 82 26 L 80 24" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
                 </g>
 
-                {/* 3. HEAD & SPIDER MASK (Looking Forward Right-Side Up) */}
+                {/* 4. HEAD & SPIDER MASK (Centered and Unobstructed) */}
                 <ellipse
                   cx="50"
-                  cy="38"
-                  rx="16"
-                  ry="19"
+                  cy="46"
+                  rx="14"
+                  ry="17"
                   fill="#dc2626"
                   stroke="#000000"
                   strokeWidth="2.2"
                 />
 
                 {/* Mask Webbing Lines */}
-                <line x1="50" y1="19" x2="50" y2="57" stroke="#000000" strokeWidth="1" opacity="0.5" />
-                <line x1="34" y1="38" x2="66" y2="38" stroke="#000000" strokeWidth="1" opacity="0.5" />
-                <ellipse cx="50" cy="38" rx="10" ry="11" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
+                <line x1="50" y1="29" x2="50" y2="63" stroke="#000000" strokeWidth="1" opacity="0.5" />
+                <line x1="36" y1="46" x2="64" y2="46" stroke="#000000" strokeWidth="1" opacity="0.5" />
+                <ellipse cx="50" cy="46" rx="9" ry="10" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
 
                 {/* Large Angled White Spidey Eyes */}
                 {/* Left Eye */}
                 <path
-                  d="M 46 36 Q 41 30 37 32 Q 35 39 43 45 Q 47 43 46 36 Z"
+                  d="M 46 44 Q 42 38 38 40 Q 36 47 44 52 Q 47 50 46 44 Z"
                   fill="#ffffff"
                   stroke="#000000"
                   strokeWidth="2.2"
                 />
                 {/* Right Eye */}
                 <path
-                  d="M 54 36 Q 59 30 63 32 Q 65 39 57 45 Q 53 43 54 36 Z"
+                  d="M 54 44 Q 58 38 62 40 Q 64 47 56 52 Q 53 50 54 44 Z"
                   fill="#ffffff"
                   stroke="#000000"
                   strokeWidth="2.2"
                 />
 
-                {/* 4. TORSO & RED/BLUE SUIT */}
+                {/* 5. TORSO & RED/BLUE SUIT */}
                 {/* Blue Side Panels */}
-                <path d="M 33 54 L 38 82 L 62 82 L 67 54 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+                <path d="M 34 58 L 38 86 L 62 86 L 66 58 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
                 {/* Red Center Vest */}
-                <path d="M 40 54 L 38 82 L 62 82 L 60 54 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                <path d="M 42 58 L 40 86 L 60 86 L 58 58 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
                 {/* Chest Spider Emblem */}
-                <ellipse cx="50" cy="65" rx="2.5" ry="3.5" fill="#000000" />
-                <path d="M 50 63 L 43 58 M 50 65 L 42 65 M 50 67 L 44 73 M 50 63 L 57 58 M 50 65 L 58 65 M 50 67 L 56 73" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
+                <ellipse cx="50" cy="70" rx="2.5" ry="3.5" fill="#000000" />
+                <path d="M 50 68 L 43 63 M 50 70 L 42 70 M 50 72 L 44 78 M 50 68 L 57 63 M 50 70 L 58 70 M 50 72 L 56 78" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
 
-                {/* 5. LEGS & RED BOOTS HANGING FREELY BELOW */}
-                {/* Left Leg Hanging with bent knee */}
-                <path d="M 38 82 L 30 102 L 24 116 L 36 118 L 40 104 L 46 84 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+                {/* 6. LEGS & RED BOOTS HANGING FREELY BELOW */}
+                {/* Left Leg */}
+                <path d="M 38 86 L 32 104 L 26 118 L 38 120 L 42 106 L 46 88 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
                 {/* Left Red Boot */}
-                <path d="M 30 102 L 24 116 L 36 118 L 40 104 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                <path d="M 32 104 L 26 118 L 38 120 L 42 106 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
 
-                {/* Right Leg Hanging with bent knee */}
-                <path d="M 62 82 L 70 102 L 76 116 L 64 118 L 60 104 L 54 84 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+                {/* Right Leg */}
+                <path d="M 62 86 L 68 104 L 74 118 L 62 120 L 58 106 L 54 88 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
                 {/* Right Red Boot */}
-                <path d="M 70 102 L 76 116 L 64 118 L 60 104 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                <path d="M 68 104 L 74 118 L 62 120 L 58 106 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
               </svg>
             </div>
           </div>
