@@ -222,19 +222,24 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                {/* 1. Web strand continuation into hands */}
-                <line x1="50" y1="0" x2="50" y2="25" stroke="#ffffff" strokeWidth="3" opacity="0.9" />
+                {/* 1. Web strand continuation into left gripping hand */}
+                <line x1="50" y1="0" x2="50" y2="14" stroke="#ffffff" strokeWidth="3" opacity="0.95" />
 
-                {/* 2. HANDS & ARMS REACHING UP HOLDING THE WEBLINE */}
-                {/* Left Hand Gripping Rope */}
-                <ellipse cx="46" cy="12" rx="4.5" ry="3.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-                {/* Left Arm extending down to shoulder */}
-                <path d="M 44 14 L 32 32 L 38 40 L 48 20 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                {/* 2. LEFT HAND & ARM FIRMLY HOLDING THE ROPE */}
+                {/* Left Hand Gripping the webline */}
+                <ellipse cx="50" cy="12" rx="4.5" ry="3.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                {/* Left Arm extending from shoulder to webline */}
+                <path d="M 48 14 L 34 32 L 40 40 L 52 18 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
 
-                {/* Right Hand Gripping Rope / Waving */}
-                <ellipse cx="54" cy="12" rx="4.5" ry="3.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-                {/* Right Arm extending down to shoulder */}
-                <path d="M 56 14 L 68 32 L 62 40 L 52 20 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                {/* 3. RIGHT HAND & ARM WAVING TO SAY "HIEE!" */}
+                <g className="animate-spidey-wave origin-[66px_44px]">
+                  {/* Right Arm reaching up & out */}
+                  <path d="M 64 42 L 78 28 L 86 16 L 80 12 L 72 24 L 60 38 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                  {/* Right Waving Hand Palm */}
+                  <ellipse cx="85" cy="14" rx="5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                  {/* Waving Fingers */}
+                  <path d="M 83 10 L 85 5 M 86 10 L 89 6 M 88 12 L 92 9 M 82 14 L 80 12" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+                </g>
 
                 {/* 3. HEAD & SPIDER MASK (Looking Forward Right-Side Up) */}
                 <ellipse
