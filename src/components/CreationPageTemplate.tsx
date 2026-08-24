@@ -77,7 +77,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     if (typeof window === 'undefined') return '600';
     try { return localStorage.getItem('cipherdrop:default-expiry') || '600'; } catch { return '600'; }
   }); // defaults to the persisted Settings preference, falling back to 10 minutes
-  const [paranoidMode, setParanoidMode] = useState(false);
 
   // Sketchpad state
   const [showSketchpad, setShowSketchpad] = useState(false);
@@ -795,12 +794,11 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
 
   // Calculate dynamic security score (0 - 100)
   const calculateSecurityScore = () => {
-    let score = 50; // Base for client AES-256-GCM + Zero-knowledge
+    let score = 65; // Base for client AES-256-GCM + Zero-knowledge
     if (passwordProtection) score += 20;
-    if (burnAfterReading) score += 15;
-    if (expiryOption === '300' || expiryOption === '600') score += 9;
-    else if (expiryOption === '3600') score += 5;
-    if (paranoidMode) score = 100;
+    if (burnAfterReading) score += 10;
+    if (expiryOption === '300' || expiryOption === '600') score += 5;
+    else if (expiryOption === '3600') score += 3;
     return Math.min(score, 100);
   };
 
@@ -850,12 +848,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
         passwordProtection ? password : undefined
       );
 
-      let shares: string[] = [];
-      if (paranoidMode) {
-        shares = splitKey(keyHex, 2, 3);
-        addLog('  ✓ Shamir (2-of-3) key split complete');
-      }
-
       // Upload to server
       const expiresSec = expiryOption === 'never' ? null : parseInt(expiryOption, 10);
       const res = await fetch('/api/pastes', {
@@ -883,9 +875,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       addLog(`> dispatch node: ${capsuleCode}`);
 
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = paranoidMode
-        ? `${origin}/cd/${capsuleId}#${shares[0]}`
-        : `${origin}/cd/${capsuleId}#${keyHex}`;
+      const shareUrl = `${origin}/cd/${capsuleId}#${keyHex}`;
       // The management dashboard lives at /p/[id]/manage and reads its key from the hash
       // fragment (never sent to the server) — not a /cd/... route or a ?manage= query param,
       // which don't exist/aren't read anywhere and would silently 404 into the plain decrypt view.
@@ -893,8 +883,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
 
       const protectionSummary = [
         passwordProtection ? 'Password' : null,
-        burnAfterReading ? 'Burn After Read' : null,
-        paranoidMode ? 'Shamir Vault' : null
+        burnAfterReading ? 'Burn After Read' : null
       ].filter(Boolean).join(' • ') || 'Zero-Knowledge';
 
       const expiryLabels: Record<string, string> = {
@@ -913,9 +902,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
         shareUrl,
         manageUrl,
         expiryText,
-        protectionText: protectionSummary,
-        isShamir: paranoidMode,
-        shares
+        protectionText: protectionSummary
       };
 
       setCreatedCapsule(newCapsule);
@@ -972,7 +959,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     setPassword('');
     setPasswordProtection(false);
     setBurnAfterReading(true);
-    setParanoidMode(false);
     setCreatedCapsule(null);
     setLogs([
       '> welcome to cipherdrop terminal',
@@ -1434,34 +1420,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                     <span>Create Another Capsule</span>
                   </button>
                 </div>
-
-                {/* Shamir Shards (if Paranoid Mode) */}
-                {createdCapsule.isShamir && createdCapsule.shares && createdCapsule.shares.length > 0 && (
-                  <div className="max-w-xl mx-auto space-y-2 text-left p-4 rounded-2xl bg-purple-950/30 border border-purple-500/20">
-                    <span className="text-[11px] font-bold text-purple-300 block">
-                      Shamir Custodian Key Shards (2-of-3 required to decrypt)
-                    </span>
-                    <div className="space-y-1.5">
-                      {createdCapsule.shares.map((shard, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-purple-500/20 text-xs font-mono">
-                          <span className="text-[#9b9bbf] text-[10px] shrink-0 font-bold">Shard #{idx + 1}:</span>
-                          <span className="text-teal-300 truncate text-[11px] select-all">{shard}</span>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(shard);
-                              setToast({ message: `Shard #${idx + 1} copied!`, type: 'success' });
-                            }}
-                            className="p-1 hover:text-white text-[#9b9bbf] shrink-0"
-                            title="Copy Shard"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Metadata Row */}
                 <div
@@ -2257,33 +2215,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                     <Lock className="w-4 h-4" />
                     <span>{isSubmitting ? 'Encrypting & Generating...' : 'Generate Capsule'}</span>
                   </button>
-
-                  {/* Paranoid Mode Toggle */}
-                  <div
-                    className="p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left"
-                    style={{ background: 'rgba(139, 92, 246, 0.05)', borderColor: 'rgba(139, 92, 246, 0.2)' }}
-                  >
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
-                        Paranoid Mode
-                      </span>
-                      <p className="text-[10px] text-[#9b9bbf]">
-                        Maximum security. Key split via Shamir&apos;s Secret Sharing (2-of-3 custodians).
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !paranoidMode;
-                        setParanoidMode(next);
-                        addLog(`> config: paranoid mode [${next ? 'ENABLED' : 'DISABLED'}]`);
-                      }}
-                      className={`toggle-track ${paranoidMode ? 'on' : 'off'}`}
-                    >
-                      <span className="toggle-thumb" />
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -2663,7 +2594,6 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
             setBurnAfterReading(config.burnAfterReading);
             setExpiryOption(config.expiryOption);
             setPasswordProtection(config.passwordProtection);
-            setParanoidMode(config.paranoidMode);
             setShowRecommendationEngine(false);
             addLog(`> applied security advisor configuration`);
             addLog(`  mode: [${config.inputMode.toUpperCase()}] | burn: [${config.burnAfterReading ? 'YES' : 'NO'}] | expiry: [${config.expiryOption}s]`);

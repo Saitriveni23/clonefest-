@@ -12,7 +12,6 @@ export interface SecurityConfig {
   burnAfterReading: boolean;
   expiryOption: string;
   passwordProtection: boolean;
-  paranoidMode: boolean;
 }
 
 interface SecurityRecommendationEngineProps {
@@ -66,11 +65,6 @@ export function SecurityRecommendationEngine({
       password = true;
     }
 
-    let paranoid = false;
-    if (sensitivity === 'highly_sensitive' || (audience === 'team' && sensitivity === 'confidential')) {
-      paranoid = true;
-    }
-
     // Reasons breakdown
     const reasons: string[] = [
       'Client-side AES-256-GCM browser zero-knowledge encryption'
@@ -78,21 +72,20 @@ export function SecurityRecommendationEngine({
 
     if (burn) reasons.push('Burn-after-reading enabled for single-read ephemeral secrecy');
     if (password) reasons.push('Password key derivation recommended for sensitive payload');
-    if (paranoid) reasons.push('Shamir 2-of-3 key split recommended for high sensitivity');
     reasons.push(`Auto-expiration configured to ${duration || '10 minutes'}`);
 
     let title = 'Standard Zero-Knowledge Capsule';
-    let score = 75;
+    let score = 80;
 
-    if (paranoid && burn) {
-      title = 'Quantum-Grade Ephemeral Vault';
-      score = 99;
+    if (burn && password) {
+      title = 'Ultra-Secure Ephemeral Capsule';
+      score = 98;
     } else if (burn || sensitivity === 'highly_sensitive') {
       title = 'Self-Destruct Stealth Capsule';
       score = 92;
     } else if (password) {
       title = 'Password-Sealed Confidential Capsule';
-      score = 85;
+      score = 88;
     }
 
     return {
@@ -103,8 +96,7 @@ export function SecurityRecommendationEngine({
         inputMode: mode,
         burnAfterReading: burn,
         expiryOption: expiry,
-        passwordProtection: password,
-        paranoidMode: paranoid
+        passwordProtection: password
       },
       reasons
     };
