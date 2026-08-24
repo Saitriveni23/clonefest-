@@ -31,14 +31,6 @@ interface PasteMetadata {
   allowed_countries?: string | null;
 }
 
-// Helper: SHA-256 client-side using Web Crypto API
-async function sha256(text: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(text);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 export default function ManagePanel({ id }: ManagePanelProps) {
   const [metadata, setMetadata] = useState<PasteMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -110,8 +102,10 @@ export default function ManagePanel({ id }: ManagePanelProps) {
 
     const fetchMetadata = async () => {
       try {
-        const hashedKey = await sha256(keyToQuery);
-        const response = await fetch(`/api/pastes/${id}?manageKey=${hashedKey}`);
+        // Raw key — the server hashes it once and compares to the stored hash (same
+        // convention the revoke/delete call already uses below). Pre-hashing here would
+        // double-hash and the comparison would never match, breaking the whole dashboard.
+        const response = await fetch(`/api/pastes/${id}?manageKey=${keyToQuery}`);
         
         if (!response.ok) {
           if (response.status === 404) {

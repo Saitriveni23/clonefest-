@@ -72,7 +72,10 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const [passwordProtection, setPasswordProtection] = useState(false);
   const [password, setPassword] = useState('');
   const [burnAfterReading, setBurnAfterReading] = useState(true);
-  const [expiryOption, setExpiryOption] = useState('600'); // 10 minutes default
+  const [expiryOption, setExpiryOption] = useState(() => {
+    if (typeof window === 'undefined') return '600';
+    try { return localStorage.getItem('cipherdrop:default-expiry') || '600'; } catch { return '600'; }
+  }); // defaults to the persisted Settings preference, falling back to 10 minutes
   const [paranoidMode, setParanoidMode] = useState(false);
 
   // Sketchpad state
@@ -127,17 +130,34 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [passwordWarningDismissed, setPasswordWarningDismissed] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedManageLink, setCopiedManageLink] = useState(false);
 
   // Archive items state
   const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
   const [archiveFilter, setArchiveFilter] = useState<'active' | 'viewed' | 'destroyed'>('active');
   const [archiveSearch, setArchiveSearch] = useState('');
 
-  // Settings
-  const [defaultExpirySetting, setDefaultExpirySetting] = useState('600');
-  const [autoCopySetting, setAutoCopySetting] = useState(true);
-  const [scanlinesSetting, setScanlinesSetting] = useState(false);
+  // Settings — persisted to localStorage so "Apply Preferences" actually sticks across visits
+  const [defaultExpirySetting, setDefaultExpirySetting] = useState(() => {
+    if (typeof window === 'undefined') return '600';
+    try { return localStorage.getItem('cipherdrop:default-expiry') || '600'; } catch { return '600'; }
+  });
+  const [autoCopySetting, setAutoCopySetting] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try { return localStorage.getItem('cipherdrop:autocopy') !== 'false'; } catch { return true; }
+  });
+  const [scanlinesSetting, setScanlinesSetting] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return localStorage.getItem('cipherdrop:scanlines') === 'true'; } catch { return false; }
+  });
+
+  // Apply/remove the CRT scanline overlay whenever the setting changes (incl. on mount)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('scanlines-active', scanlinesSetting);
+  }, [scanlinesSetting]);
 
   // Stop camera stream safely
   const stopCamera = () => {
@@ -758,7 +778,10 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       const shareUrl = paranoidMode
         ? `${origin}/cd/${capsuleId}#${shares[0]}`
         : `${origin}/cd/${capsuleId}#${keyHex}`;
-      const manageUrl = `${origin}/cd/${capsuleId}?manage=${manageKey}`;
+      // The management dashboard lives at /p/[id]/manage and reads its key from the hash
+      // fragment (never sent to the server) — not a /cd/... route or a ?manage= query param,
+      // which don't exist/aren't read anywhere and would silently 404 into the plain decrypt view.
+      const manageUrl = `${origin}/p/${capsuleId}/manage#${manageKey}`;
 
       const protectionSummary = [
         passwordProtection ? 'Password' : null,
@@ -788,6 +811,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       };
 
       setCreatedCapsule(newCapsule);
+      setPasswordWarningDismissed(false);
 
       // Save to local archive
       const newArchiveItem: ArchiveItem = {
@@ -1233,6 +1257,33 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                   </div>
                 </div>
 
+                {/* Manage Link Row — private, sender-only key to revoke/check read receipts */}
+                {createdCapsule.manageUrl && (
+                  <div className="max-w-xl mx-auto space-y-2 text-left">
+                    <span className="text-[11px] font-bold text-[#9b9bbf]">Manage link (keep private — do not share)</span>
+                    <div className="flex bg-black/40 border border-rose-500/30 rounded-xl p-1.5 items-center justify-between gap-2">
+                      <input
+                        readOnly
+                        value={createdCapsule.manageUrl}
+                        className="bg-transparent text-xs text-rose-300 font-mono px-2 py-1 outline-none w-full truncate select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(createdCapsule.manageUrl!);
+                          setCopiedManageLink(true);
+                          setTimeout(() => setCopiedManageLink(false), 2000);
+                          setToast({ message: 'Manage link copied!', type: 'success' });
+                        }}
+                        className="btn-ghost px-4 py-2 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1"
+                      >
+                        {copiedManageLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedManageLink ? 'Copied' : 'Copy Link'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
                   <button
@@ -1253,6 +1304,18 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                     <ExternalLink className="w-4 h-4 text-teal-400" />
                     <span>Open Decryption Page</span>
                   </a>
+
+                  {createdCapsule.manageUrl && (
+                    <a
+                      href={createdCapsule.manageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-ghost px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 hover:text-white"
+                    >
+                      <KeyRound className="w-4 h-4 text-rose-400" />
+                      <span>Manage Capsule</span>
+                    </a>
+                  )}
                 </div>
 
                 {/* Metadata Row */}
@@ -1275,7 +1338,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                 </div>
 
                 {/* Warning callout */}
-                {passwordProtection && (
+                {passwordProtection && !passwordWarningDismissed && (
                   <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 max-w-xl mx-auto flex items-center justify-between gap-4 text-left">
                     <div className="flex items-center gap-2.5">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1286,7 +1349,10 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                     </div>
                     <button
                       type="button"
-                      onClick={() => setToast({ message: 'Acknowledged.', type: 'info' })}
+                      onClick={() => {
+                        setPasswordWarningDismissed(true);
+                        setToast({ message: 'Acknowledged.', type: 'info' });
+                      }}
                       className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold cursor-pointer"
                     >
                       I Understand
@@ -2290,6 +2356,18 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                           <Copy className="w-4 h-4" />
                         </button>
                       )}
+
+                      {item.manageUrl && (
+                        <a
+                          href={item.manageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-[#9b9bbf] hover:text-white cursor-pointer"
+                          title="Manage Capsule"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -2359,6 +2437,14 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
             <button
               type="button"
               onClick={() => {
+                try {
+                  localStorage.setItem('cipherdrop:default-expiry', defaultExpirySetting);
+                  localStorage.setItem('cipherdrop:autocopy', String(autoCopySetting));
+                  localStorage.setItem('cipherdrop:scanlines', String(scanlinesSetting));
+                } catch {
+                  // localStorage unavailable — settings just won't persist across visits
+                }
+                setExpiryOption(defaultExpirySetting);
                 setToast({ message: 'Settings saved to browser node.', type: 'success' });
                 setActiveTab('terminal');
               }}
