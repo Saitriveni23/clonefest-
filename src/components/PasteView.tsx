@@ -347,7 +347,7 @@ export function PasteView({ id }: PasteViewProps) {
   // Start countdown on decryption if burn after read
   useEffect(() => {
     if (payload && burnAfterRead && burnCountdown === null) {
-      setBurnCountdown(10);
+      setBurnCountdown(30);
     }
   }, [payload, burnAfterRead, burnCountdown]);
 
@@ -367,7 +367,9 @@ export function PasteView({ id }: PasteViewProps) {
       return () => clearTimeout(t);
     }
 
-    playDestructSound(false);
+    if (burnCountdown <= 5) {
+      playDestructSound(false);
+    }
 
     const timer = setTimeout(() => {
       setBurnCountdown(prev => (prev !== null ? prev - 1 : null));
@@ -1259,14 +1261,14 @@ export function PasteView({ id }: PasteViewProps) {
                   stroke="#a855f7"
                   strokeWidth="6"
                   strokeDasharray={314.159}
-                  strokeDashoffset={314.159 * (1 - (burnCountdown !== null ? burnCountdown / 10 : 1))}
+                  strokeDashoffset={314.159 * (1 - (burnCountdown !== null ? burnCountdown / 30 : 1))}
                   strokeLinecap="round"
                   style={{ transition: 'stroke-dashoffset 1s linear' }}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center leading-tight">
                 <span className="text-2xl font-black font-mono text-white tracking-wider">
-                  00:{burnCountdown !== null && burnCountdown < 10 ? `0${burnCountdown}` : burnCountdown ?? '10'}
+                  00:{burnCountdown !== null && burnCountdown < 10 ? `0${burnCountdown}` : burnCountdown ?? '30'}
                 </span>
                 <span className="text-[10px] text-[#9b9bbf] mt-0.5">Time remaining</span>
               </div>
