@@ -7,18 +7,16 @@ import confetti from 'canvas-confetti';
 const SPIDEY_SECRET_KEY = 'SPIDEY-WEB-999';
 const REVEALED_MESSAGE = 'Now you know how to decrypt. Enjoy encrypting with the website! 🕷️🕸️';
 
-interface Point {
-  x: number; // percentage of viewport width
-  y: number; // percentage of viewport height
+// Top hanging waypoints along the ceiling
+interface HangingPosition {
+  xPercent: number;
+  webHeightPx: number;
 }
 
-const WAYPOINTS: Point[] = [
-  { x: 6, y: 10 },      // Top-Left Corner
-  { x: 86, y: 10 },     // Top-Right Corner
-  { x: 86, y: 78 },     // Bottom-Right Corner
-  { x: 6, y: 78 },      // Bottom-Left Corner
-  { x: 48, y: 12 },     // Top-Center
-  { x: 48, y: 76 }      // Bottom-Center
+const HANGING_POSITIONS: HangingPosition[] = [
+  { xPercent: 12, webHeightPx: 140 },  // Top-Left hanging
+  { xPercent: 82, webHeightPx: 160 },  // Top-Right hanging
+  { xPercent: 48, webHeightPx: 120 }   // Top-Center hanging
 ];
 
 interface SpidermanAgentProps {
@@ -26,11 +24,7 @@ interface SpidermanAgentProps {
 }
 
 export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [targetIdx, setTargetIdx] = useState(1);
-  const [spideyPos, setSpideyPos] = useState<Point>(WAYPOINTS[0]);
-  const [isWebActive, setIsWebActive] = useState(false);
-  const [isZipping, setIsZipping] = useState(false);
+  const [posIdx, setPosIdx] = useState(1); // Default to Top-Right
 
   // Decryption bubble state
   const [showBubble, setShowBubble] = useState(false);
@@ -98,36 +92,19 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
     } catch (e) {}
   };
 
-  // Web-Shooting & Zipping Cycle (Only when on Landing view)
+  // Change hanging positions periodically across ceiling
   useEffect(() => {
     if (!isLanding || showBubble) return;
 
-    const sequenceTimer = setInterval(() => {
-      const nextTargetIdx = (currentIdx + 1) % WAYPOINTS.length;
-      setTargetIdx(nextTargetIdx);
-
-      // 1. Shoot realistic spider web line to target!
-      setIsWebActive(true);
+    const interval = setInterval(() => {
+      setPosIdx((prev) => (prev + 1) % HANGING_POSITIONS.length);
       playThwipSound();
+    }, 7000);
 
-      // 2. Zip Spidey along the web line!
-      setTimeout(() => {
-        setIsZipping(true);
-        setSpideyPos(WAYPOINTS[nextTargetIdx]);
-      }, 600);
+    return () => clearInterval(interval);
+  }, [isLanding, showBubble]);
 
-      // 3. Arrive, retract web, and land!
-      setTimeout(() => {
-        setIsWebActive(false);
-        setIsZipping(false);
-        setCurrentIdx(nextTargetIdx);
-      }, 1650);
-    }, 4500);
-
-    return () => clearInterval(sequenceTimer);
-  }, [currentIdx, showBubble, isLanding]);
-
-  const currentTargetPoint = WAYPOINTS[targetIdx];
+  const currentPos = HANGING_POSITIONS[posIdx];
 
   const handleClickSpiderman = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -168,24 +145,10 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
     }
   };
 
-  // Calculate coordinates for realistic braided web rope
-  const x1 = spideyPos.x + 3;
-  const y1 = spideyPos.y + 4;
-  const x2 = currentTargetPoint.x + 3;
-  const y2 = currentTargetPoint.y + 4;
-
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2 + 2;
-
-  const deltaX = x2 - x1;
-  const deltaY = y2 - y1;
-  const angleRad = Math.atan2(deltaY, deltaX);
-  const angleDeg = (angleRad * 180) / Math.PI;
-
   return (
     <>
       {/* ========================================================================= */}
-      {/* SPIDER WEB MESH BACKGROUND (Light, Subtle, Luminous)                      */}
+      {/* FULL WEB APPLICATION SPIDER WEB MESH BACKGROUND                           */}
       {/* ========================================================================= */}
       <div className="fixed inset-0 pointer-events-none z-10 overflow-hidden select-none">
         <svg
@@ -239,112 +202,173 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
           <circle cx="440" cy="275" r="2" fill="#38bdf8" fillOpacity="0.5" />
           <circle cx="1000" cy="275" r="2" fill="#38bdf8" fillOpacity="0.5" />
           <circle cx="440" cy="625" r="2" fill="#38bdf8" fillOpacity="0.5" />
-          <circle cx="1000" cy="625" r="2" fill="#38bdf8" fillOpacity="0.5" />
+          <circle cx="1000" cy="625" r="2.5" fill="#38bdf8" fillOpacity="0.5" />
         </svg>
-
-        {/* ======================================================================= */}
-        {/* REALISTIC THROWN BRAIDED WEBLINE (Only when on Landing view)           */}
-        {/* ======================================================================= */}
-        {isLanding && isWebActive && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
-            <defs>
-              <filter id="silkGlow" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* 1. Main Silk Core Rope */}
-            <path
-              d={`M ${x1}% ${y1}% Q ${midX}% ${midY}% ${x2}% ${y2}%`}
-              stroke="#ffffff"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              fill="none"
-              filter="url(#silkGlow)"
-            />
-
-            {/* 2. Braided Outer Silk Fibers */}
-            <path
-              d={`M ${x1}% ${y1}% Q ${midX - 1}% ${midY - 1}% ${x2}% ${y2}%`}
-              stroke="#e9d5ff"
-              strokeWidth="1.8"
-              strokeDasharray="8 4"
-              fill="none"
-            />
-            <path
-              d={`M ${x1}% ${y1}% Q ${midX + 1}% ${midY + 1}% ${x2}% ${y2}%`}
-              stroke="#c084fc"
-              strokeWidth="1.2"
-              strokeDasharray="4 6"
-              fill="none"
-            />
-
-            {/* 3. Realistic Spider Web Anchor Net / Splat at Target Point */}
-            <g transform={`translate(${x2 * (typeof window !== 'undefined' ? window.innerWidth / 100 : 12)}, ${y2 * (typeof window !== 'undefined' ? window.innerHeight / 100 : 8)})`}>
-              {Array.from({ length: 8 }).map((_, i) => {
-                const angle = (i * Math.PI) / 4;
-                const r = 24;
-                return (
-                  <line
-                    key={i}
-                    x1="0"
-                    y1="0"
-                    x2={Math.cos(angle) * r}
-                    y2={Math.sin(angle) * r}
-                    stroke="#ffffff"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    filter="url(#silkGlow)"
-                  />
-                );
-              })}
-              <circle cx="0" cy="0" r="8" stroke="#ffffff" strokeWidth="1.2" fill="rgba(255,255,255,0.2)" strokeDasharray="3 2" />
-              <circle cx="0" cy="0" r="16" stroke="#c084fc" strokeWidth="1.2" fill="none" strokeDasharray="4 3" />
-              <circle cx="0" cy="0" r="3.5" fill="#ffffff" className="animate-ping" />
-            </g>
-          </svg>
-        )}
       </div>
 
       {/* ========================================================================= */}
-      {/* SPIDER-MAN CHARACTER (Rendered exclusively on the Welcome Landing View)   */}
+      {/* ICONIC UPSIDE-DOWN HANGING SPIDER-MAN (Suspended from top webline)       */}
       {/* ========================================================================= */}
       {isLanding && (
         <div
-          className="fixed z-40 select-none cursor-pointer transition-all duration-[1000ms] ease-out"
+          className="fixed top-0 z-40 select-none cursor-pointer transition-all duration-[1200ms] ease-in-out"
           style={{
-            top: `${spideyPos.y}%`,
-            left: `${spideyPos.x}%`,
-            transform: isZipping ? `rotate(${angleDeg * 0.4}deg) scale(1.1)` : 'rotate(0deg) scale(1)'
+            left: `${currentPos.xPercent}%`
           }}
         >
-          {/* Interactive Speech Bubble */}
+          {/* Hanging Pendulum Assembly */}
+          <div className="flex flex-col items-center animate-spidey-hang">
+            
+            {/* Top Ceiling Anchor Web Splat */}
+            <div className="relative w-8 h-3 flex items-center justify-center">
+              <div className="w-6 h-2 bg-purple-400/40 rounded-full blur-[1px]" />
+              <div className="absolute w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#ffffff]" />
+            </div>
+
+            {/* Glowing Braided Spider Silk Hanging Webline */}
+            <div
+              className="relative w-[3px] bg-gradient-to-b from-white via-purple-200 to-white shadow-[0_0_10px_rgba(255,255,255,0.9)]"
+              style={{
+                height: `${currentPos.webHeightPx}px`
+              }}
+            >
+              {/* Wrapped outer fibers */}
+              <div className="absolute inset-0 bg-purple-400/50 opacity-70" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.8) 3px, rgba(255,255,255,0.8) 6px)' }} />
+            </div>
+
+            {/* Upside Down Hanging Spider-Man Character */}
+            <div
+              onClick={handleClickSpiderman}
+              className="relative w-24 h-32 flex items-center justify-center group hover:scale-105 transition-transform -mt-2"
+              title="Click hanging Spider-Man to decrypt his secret key! 🕷️"
+            >
+              {/* Full-Body SVG Upside-Down Hanging Spider-Man */}
+              <svg
+                className="w-full h-full drop-shadow-[0_8px_20px_rgba(239,68,68,0.7)]"
+                viewBox="0 0 100 130"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* --- TOP: CROSSED HANGING LEGS & RED BOOTS (Clinging to Web) --- */}
+                {/* Web Strand Passing Through Legs */}
+                <line x1="50" y1="0" x2="50" y2="40" stroke="#ffffff" strokeWidth="3" opacity="0.9" />
+
+                {/* Left Leg Crossed */}
+                <path
+                  d="M 50 36 L 36 22 L 28 8 L 40 4 L 46 16 L 50 28 Z"
+                  fill="#2563eb"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+                {/* Left Red Boot (Clinging onto web) */}
+                <path
+                  d="M 28 8 L 40 4 L 46 16 L 36 22 Z"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+
+                {/* Right Leg Crossed */}
+                <path
+                  d="M 50 36 L 64 22 L 72 8 L 60 4 L 54 16 L 50 28 Z"
+                  fill="#2563eb"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+                {/* Right Red Boot (Clinging onto web) */}
+                <path
+                  d="M 72 8 L 60 4 L 54 16 L 64 22 Z"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+
+                {/* --- MIDDLE: TORSO & WAIST (UPSIDE DOWN) --- */}
+                {/* Blue Hips & Sides */}
+                <path
+                  d="M 36 36 L 32 64 L 68 64 L 64 36 Z"
+                  fill="#2563eb"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+                {/* Red Chest & Center Vest */}
+                <path
+                  d="M 40 36 L 38 64 L 62 64 L 60 36 Z"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+                {/* Chest Spider Emblem */}
+                <ellipse cx="50" cy="50" rx="2.5" ry="3.5" fill="#000000" />
+                <path d="M 50 48 L 43 43 M 50 50 L 42 50 M 50 52 L 44 58 M 50 48 L 57 43 M 50 50 L 58 50 M 50 52 L 56 58" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
+
+                {/* --- ARMS: ONE HOLDING WEB, ONE WAVING / RELAXING --- */}
+                {/* Left Arm (Holding the webline) */}
+                <path
+                  d="M 33 58 L 22 48 L 44 32 L 48 36 L 30 54 Z"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+
+                {/* Right Arm (Folded / Waving Relaxed Pose) */}
+                <path
+                  d="M 67 58 L 78 52 L 84 62 L 78 68 L 72 58 Z"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2"
+                />
+
+                {/* --- BOTTOM: HEAD & SPIDER MASK (Looking forward) --- */}
+                <ellipse
+                  cx="50"
+                  cy="86"
+                  rx="18"
+                  ry="21"
+                  fill="#dc2626"
+                  stroke="#000000"
+                  strokeWidth="2.2"
+                />
+
+                {/* Mask Webbing Lines */}
+                <line x1="50" y1="65" x2="50" y2="107" stroke="#000000" strokeWidth="1" opacity="0.5" />
+                <line x1="32" y1="86" x2="68" y2="86" stroke="#000000" strokeWidth="1" opacity="0.5" />
+                <ellipse cx="50" cy="86" rx="11" ry="13" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
+
+                {/* Large Angled White Spidey Eyes */}
+                {/* Left Eye */}
+                <path
+                  d="M 46 82 Q 41 74 36 77 Q 34 85 43 94 Q 47 91 46 82 Z"
+                  fill="#ffffff"
+                  stroke="#000000"
+                  strokeWidth="2.5"
+                />
+                {/* Right Eye */}
+                <path
+                  d="M 54 82 Q 59 74 64 77 Q 66 85 57 94 Q 53 91 54 82 Z"
+                  fill="#ffffff"
+                  stroke="#000000"
+                  strokeWidth="2.5"
+                />
+              </svg>
+            </div>
+          </div>
+
+          {/* Interactive Speech Bubble (Directly Below Hanging Spider-Man) */}
           {showBubble && (
             <div
-              className={`absolute w-72 sm:w-80 p-4 rounded-2xl bg-[#17132a] text-[#f5f3ff] border-2 border-purple-400 shadow-[0_16px_48px_rgba(0,0,0,0.85)] animate-scale-in text-left z-50 cursor-default ${
-                spideyPos.y > 50 ? '-top-56' : 'top-28'
-              } ${spideyPos.x > 50 ? '-left-64 sm:-left-72' : 'left-0'}`}
+              className="absolute top-full -left-28 sm:-left-32 w-72 sm:w-80 p-4 rounded-2xl bg-[#17132a] text-[#f5f3ff] border-2 border-purple-400 shadow-[0_16px_48px_rgba(0,0,0,0.85)] animate-scale-in text-left z-50 cursor-default mt-3"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Bubble Arrow */}
-              <div
-                className={`absolute w-3.5 h-3.5 bg-[#17132a] border-purple-400 rotate-45 ${
-                  spideyPos.y > 50
-                    ? '-bottom-2 border-r-2 border-b-2'
-                    : '-top-2 border-l-2 border-t-2'
-                } ${spideyPos.x > 50 ? 'right-6' : 'left-6'}`}
-              />
+              {/* Bubble Arrow pointing Up to Hanging Spidey */}
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-[#17132a] border-l-2 border-t-2 border-purple-400 rotate-45" />
 
               {/* Header */}
               <div className="flex items-center justify-between pb-2 border-b border-purple-500/25 mb-3">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
                   <span className="text-xs font-black text-purple-200 uppercase tracking-wider font-mono">
-                    🕷️ Spidey&apos;s Web Cipher
+                    🕷️ Hanging Spidey&apos;s Secret
                   </span>
                 </div>
 
@@ -360,7 +384,7 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
               {!isDecrypted ? (
                 <div className="space-y-3">
                   <p className="text-[11px] text-purple-200/90 leading-tight">
-                    Spider-Man encrypted a secret note in the web! Paste the key to decrypt:
+                    Spider-Man is hanging out with an encrypted secret! Paste the key to decrypt:
                   </p>
 
                   {/* Secret Key Badge */}
@@ -435,51 +459,6 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
               )}
             </div>
           )}
-
-          {/* Full Body Spider-Man Vector Character */}
-          <div
-            onClick={handleClickSpiderman}
-            className="relative w-22 h-26 flex items-center justify-center group hover:scale-110 transition-transform"
-            title="Click Spider-Man to decrypt his secret message! 🕷️"
-          >
-            <svg
-              className="w-full h-full drop-shadow-[0_4px_16px_rgba(239,68,68,0.6)]"
-              viewBox="0 0 100 120"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Legs & Boots */}
-              <path d="M 38 72 L 26 92 L 18 106 L 30 108 L 36 94 L 44 76 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-              <path d="M 26 92 L 18 106 L 30 108 L 36 94 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-              <path d="M 62 72 L 74 92 L 82 106 L 70 108 L 64 94 L 56 76 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-              <path d="M 74 92 L 82 106 L 70 108 L 64 94 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-
-              {/* Torso & Chest */}
-              <path d="M 32 46 L 38 74 L 62 74 L 68 46 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-              <path d="M 40 44 L 38 74 L 62 74 L 60 44 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-              <line x1="50" y1="44" x2="50" y2="74" stroke="#000000" strokeWidth="1" opacity="0.6" />
-              <line x1="40" y1="58" x2="60" y2="58" stroke="#000000" strokeWidth="1" opacity="0.6" />
-              <line x1="42" y1="66" x2="58" y2="66" stroke="#000000" strokeWidth="1" opacity="0.6" />
-
-              <ellipse cx="50" cy="56" rx="2.5" ry="3.5" fill="#000000" />
-              <path d="M 50 54 L 43 49 M 50 56 L 42 56 M 50 58 L 44 64 M 50 54 L 57 49 M 50 56 L 58 56 M 50 58 L 56 64" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
-
-              {/* Arms & Web Shooter Wrists */}
-              <path d="M 33 46 L 18 56 L 10 52 L 12 46 L 24 42 L 35 44 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-              <path d="M 67 46 L 82 40 L 94 36 L 96 42 L 86 48 L 65 48 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-              <circle cx="95" cy="38" r="3" fill="#ffffff" className="animate-ping" />
-
-              {/* Head & Spider Mask */}
-              <ellipse cx="50" cy="25" rx="17" ry="20" fill="#dc2626" stroke="#000000" strokeWidth="2.2" />
-              <line x1="50" y1="5" x2="50" y2="45" stroke="#000000" strokeWidth="1" opacity="0.5" />
-              <line x1="33" y1="25" x2="67" y2="25" stroke="#000000" strokeWidth="1" opacity="0.5" />
-              <ellipse cx="50" cy="25" rx="10" ry="12" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
-
-              {/* Spidey Eyes */}
-              <path d="M 46 22 Q 41 15 37 17 Q 35 24 43 32 Q 47 30 46 22 Z" fill="#ffffff" stroke="#000000" strokeWidth="2.5" />
-              <path d="M 54 22 Q 59 15 63 17 Q 65 24 57 32 Q 53 30 54 22 Z" fill="#ffffff" stroke="#000000" strokeWidth="2.5" />
-            </svg>
-          </div>
         </div>
       )}
     </>
