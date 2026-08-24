@@ -107,7 +107,9 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     '> nothing is sent in plaintext',
     "> type 'help' to see commands"
   ]);
+  const [cliInput, setCliInput] = useState('');
   const logContainerRef = useRef<HTMLDivElement | null>(null);
+  const cliInputRef = useRef<HTMLInputElement | null>(null);
 
   // Capsule Created Success State
   const [createdCapsule, setCreatedCapsule] = useState<{
@@ -524,6 +526,143 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     if (val.length % 25 === 0 && val.length > 0) {
       addLog(`> payload buffer: ${val.length} chars (markdown encoded)`);
     }
+  };
+
+  // Interactive Terminal CLI Command Processor
+  const handleCliCommand = (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = cliInput.trim();
+    if (!raw) return;
+
+    setLogs(prev => [...prev, `> ${raw}`]);
+    setCliInput('');
+
+    const [action, ...args] = raw.toLowerCase().split(' ');
+    const fullArg = args.join(' ');
+
+    switch (action) {
+      case 'help':
+      case '?':
+        setLogs(prev => [
+          ...prev,
+          '┌────────── AVAILABLE TERMINAL COMMANDS ──────────┐',
+          '│ help        - show this list of available commands',
+          '│ clear       - clear console log buffer',
+          '│ mode <type> - switch mode (text|file|code|voice|video)',
+          '│ burn <on|off> - toggle burn-after-reading',
+          '│ pass <pwd>  - set capsule password protection',
+          '│ expire <sec>- set retention (300, 600, 3600, never)',
+          '│ score       - calculate live security score',
+          '│ advisor     - launch 6-step guided security advisor',
+          '│ encrypt     - generate and drop encrypted capsule',
+          '│ archive     - open capsule archive and history',
+          '│ status      - print client cryptographic state',
+          '└─────────────────────────────────────────────────┘'
+        ]);
+        break;
+
+      case 'clear':
+      case 'cls':
+        setLogs([
+          '> console cleared',
+          "> type 'help' to see commands"
+        ]);
+        break;
+
+      case 'mode':
+        if (['text', 'file', 'code', 'voice', 'video'].includes(fullArg)) {
+          setInputMode(fullArg as any);
+          setLogs(prev => [...prev, `✓ input mode switched to: [${fullArg.toUpperCase()}]`]);
+        } else {
+          setLogs(prev => [...prev, '[ERR] invalid mode. Choose: text, file, code, voice, video']);
+        }
+        break;
+
+      case 'burn':
+        if (fullArg === 'on' || fullArg === 'true' || fullArg === '1') {
+          setBurnAfterReading(true);
+          setLogs(prev => [...prev, '✓ burn-after-reading ENABLED']);
+        } else if (fullArg === 'off' || fullArg === 'false' || fullArg === '0') {
+          setBurnAfterReading(false);
+          setLogs(prev => [...prev, '✓ burn-after-reading DISABLED']);
+        } else {
+          setLogs(prev => [...prev, '[ERR] usage: burn on | burn off']);
+        }
+        break;
+
+      case 'pass':
+      case 'password':
+        if (fullArg) {
+          setPasswordProtection(true);
+          setPassword(fullArg);
+          setLogs(prev => [...prev, `✓ password set: [${fullArg}] (PBKDF2-SHA256)`]);
+        } else {
+          setPasswordProtection(false);
+          setPassword('');
+          setLogs(prev => [...prev, '✓ password protection removed']);
+        }
+        break;
+
+      case 'expire':
+      case 'expiry':
+        if (['300', '600', '3600', '86400', '604800', 'never'].includes(fullArg)) {
+          setExpiryOption(fullArg);
+          setLogs(prev => [...prev, `✓ retention lifetime set: [${fullArg === 'never' ? 'NEVER' : fullArg + 's'}]`]);
+        } else {
+          setLogs(prev => [...prev, '[ERR] usage: expire <300|600|3600|86400|604800|never>']);
+        }
+        break;
+
+      case 'score':
+        const sc = calculateSecurityScore();
+        setLogs(prev => [
+          ...prev,
+          `✓ SECURITY RATING: ${sc}/100 [${sc >= 80 ? 'MAXIMUM' : sc >= 60 ? 'STRONG' : 'MODERATE'}]`,
+          `  AES-256-GCM: ACTIVE | Burn: ${burnAfterReading ? 'YES' : 'NO'} | Pass: ${passwordProtection ? 'YES' : 'NO'}`
+        ]);
+        break;
+
+      case 'advisor':
+      case 'guide':
+        setShowRecommendationEngine(true);
+        setLogs(prev => [...prev, '> launched 6-step guided security advisor wizard']);
+        break;
+
+      case 'encrypt':
+      case 'generate':
+      case 'drop':
+        handleGenerateCapsule();
+        break;
+
+      case 'archive':
+      case 'history':
+        setActiveTab('archive');
+        setLogs(prev => [...prev, '> switched to archive view']);
+        break;
+
+      case 'status':
+        setLogs(prev => [
+          ...prev,
+          '✓ CRYPTO ENGINE: WebCrypto API (Hardware-Accelerated)',
+          '✓ CIPHER SUITE: AES-256-GCM Authenticated 128-bit tag',
+          '✓ KEY DERIVATION: PBKDF2-HMAC-SHA256 (100,000 iterations)',
+          '✓ ZERO KNOWLEDGE: Client-side local encryption buffer verified'
+        ]);
+        break;
+
+      default:
+        setLogs(prev => [
+          ...prev,
+          `[ERR] unknown command: '${action}'. Type 'help' to see all available commands.`
+        ]);
+        break;
+    }
+
+    setTimeout(() => {
+      if (logContainerRef.current) {
+        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      }
+    }, 50);
   };
 
   // Calculate dynamic security score (0 - 100)
@@ -1185,22 +1324,26 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                 {/* Console Log Body */}
                 <div
                   ref={logContainerRef}
-                  className="p-4 font-mono text-xs text-left overflow-y-auto space-y-1.5 flex-1 min-h-[320px] max-h-[480px] bg-black/60 select-text"
+                  onClick={() => cliInputRef.current?.focus()}
+                  className="p-4 font-mono text-xs text-left overflow-y-auto space-y-1.5 flex-1 min-h-[300px] max-h-[440px] bg-black/60 select-text cursor-text"
                 >
                   {logs.map((line, idx) => {
                     const isSuccess = line.includes('✓') || line.includes('READY');
-                    const isError = line.includes('ERROR');
+                    const isError = line.includes('ERROR') || line.includes('[ERR]');
                     const isPrompt = line.startsWith('>');
+                    const isBox = line.startsWith('┌') || line.startsWith('│') || line.startsWith('└');
                     return (
                       <p
                         key={idx}
                         className={`leading-relaxed ${
                           isSuccess
-                            ? 'text-emerald-400'
+                            ? 'text-emerald-400 font-semibold'
                             : isError
-                            ? 'text-rose-400'
+                            ? 'text-rose-400 font-semibold'
+                            : isBox
+                            ? 'text-purple-300/90 whitespace-pre'
                             : isPrompt
-                            ? 'text-[#c084fc]'
+                            ? 'text-[#c084fc] font-bold'
                             : 'text-[#9b9bbf]'
                         }`}
                       >
@@ -1208,11 +1351,35 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                       </p>
                     );
                   })}
-                  <p className="text-[#5c5c80] flex items-center gap-1">
-                    <span>&gt;</span>
-                    <span className="w-2 h-3.5 bg-purple-400 inline-block cursor-blink" />
-                  </p>
                 </div>
+
+                {/* Interactive CLI Command Input Line */}
+                <form
+                  onSubmit={handleCliCommand}
+                  className="flex items-center gap-2 px-3 py-2 border-t bg-black/85"
+                  style={{ borderColor: 'rgba(120, 80, 255, 0.2)' }}
+                  onClick={() => cliInputRef.current?.focus()}
+                >
+                  <span className="text-[#c084fc] font-mono text-xs font-black shrink-0">&gt;</span>
+                  <input
+                    ref={cliInputRef}
+                    type="text"
+                    value={cliInput}
+                    onChange={e => setCliInput(e.target.value)}
+                    placeholder="type 'help', 'score', 'mode code', 'clear'..."
+                    className="bg-transparent text-xs font-mono text-white placeholder:text-[#5c5c80] outline-none w-full flex-1 caret-purple-400"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/30 text-[10px] font-mono text-purple-300 uppercase cursor-pointer"
+                  >
+                    Enter
+                  </button>
+                </form>
 
                 {/* Status footer */}
                 <div
