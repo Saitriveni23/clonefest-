@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Lock, ArrowRight } from 'lucide-react';
 
 interface HeroLoadingIntroProps {
@@ -10,35 +10,43 @@ interface HeroLoadingIntroProps {
 export function HeroLoadingIntro({ onComplete }: HeroLoadingIntroProps) {
   const [activeFrame, setActiveFrame] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [isFadingOut, setIsFadingOut] = useState(false);
+  const onCompleteRef = useRef(onComplete);
 
   useEffect(() => {
-    // Progression through 5 frames: ~600ms per frame
-    const timers: NodeJS.Timeout[] = [];
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
-    timers.push(setTimeout(() => setActiveFrame(2), 650));
-    timers.push(setTimeout(() => setActiveFrame(3), 1300));
-    timers.push(setTimeout(() => setActiveFrame(4), 1950));
-    timers.push(setTimeout(() => setActiveFrame(5), 2600));
-    timers.push(setTimeout(() => {
-      setIsFadingOut(true);
-    }, 3400));
-    timers.push(setTimeout(() => {
-      onComplete();
-    }, 3800));
+  useEffect(() => {
+    // Fast automatic progression through 5 frames
+    const t1 = setTimeout(() => setActiveFrame(2), 500);
+    const t2 = setTimeout(() => setActiveFrame(3), 1000);
+    const t3 = setTimeout(() => setActiveFrame(4), 1500);
+    const t4 = setTimeout(() => setActiveFrame(5), 2000);
+    const t5 = setTimeout(() => setIsFadingOut(true), 2700);
+    const t6 = setTimeout(() => {
+      onCompleteRef.current();
+    }, 3000);
 
     return () => {
-      timers.forEach(t => clearTimeout(t));
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+      clearTimeout(t6);
     };
-  }, [onComplete]);
+  }, []);
 
   const handleSkip = () => {
     setIsFadingOut(true);
-    setTimeout(onComplete, 300);
+    setTimeout(() => {
+      onCompleteRef.current();
+    }, 200);
   };
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#070811] text-[#f0f0ff] p-4 select-none transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#070811] text-[#f0f0ff] p-4 select-none transition-opacity duration-300 ${
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -49,7 +57,7 @@ export function HeroLoadingIntro({ onComplete }: HeroLoadingIntroProps) {
       </div>
 
       {/* Top Header */}
-      <div className="relative z-10 text-center space-y-1 mb-8 sm:mb-12">
+      <div className="relative z-10 text-center space-y-1 mb-6 sm:mb-10">
         <div className="flex items-center justify-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-purple-500/40">
             <ShieldCheck className="w-4.5 h-4.5 text-white" />
@@ -64,8 +72,8 @@ export function HeroLoadingIntro({ onComplete }: HeroLoadingIntroProps) {
       </div>
 
       {/* Main Display Stage for Current Frame */}
-      <div className="relative z-10 w-full max-w-lg mb-8">
-        <div className="rounded-3xl p-8 border border-purple-500/25 bg-[#0e1020]/90 backdrop-blur-2xl shadow-2xl shadow-purple-900/40 flex flex-col items-center justify-center min-h-[280px]">
+      <div className="relative z-10 w-full max-w-lg mb-6">
+        <div className="rounded-3xl p-8 border border-purple-500/25 bg-[#0e1020]/90 backdrop-blur-2xl shadow-2xl shadow-purple-900/40 flex flex-col items-center justify-center min-h-[260px]">
           
           {/* FRAME 1: INIT */}
           {activeFrame === 1 && (
@@ -173,7 +181,7 @@ export function HeroLoadingIntro({ onComplete }: HeroLoadingIntroProps) {
         </div>
       </div>
 
-      {/* Frame Step Carousel Bar (Matching Reference Image Bottom Strip) */}
+      {/* Frame Step Carousel Bar */}
       <div className="relative z-10 w-full max-w-3xl">
         <div className="text-[11px] font-mono font-bold text-[#9b9bbf] uppercase tracking-wider mb-2.5 text-center sm:text-left">
           1. HERO LOADING ANIMATION
@@ -216,10 +224,10 @@ export function HeroLoadingIntro({ onComplete }: HeroLoadingIntroProps) {
       <button
         type="button"
         onClick={handleSkip}
-        className="relative z-10 mt-8 px-5 py-2 rounded-xl text-xs font-bold text-[#9b9bbf] hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1.5 transition-all cursor-pointer"
+        className="relative z-10 mt-6 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
       >
         <span>Enter CipherDrop</span>
-        <ArrowRight className="w-3.5 h-3.5" />
+        <ArrowRight className="w-4 h-4" />
       </button>
     </div>
   );
