@@ -17,6 +17,7 @@ import { Toast, ToastType } from './Toast';
 import { Tooltip } from './Tooltip';
 import { HeroLoadingIntro } from './HeroLoadingIntro';
 import { SecurityRecommendationEngine, SecurityConfig } from './SecurityRecommendationEngine';
+import { SpidermanAgent } from './SpidermanAgent';
 
 interface CreationPageTemplateProps {
   defaultMethod?: 'direct' | 'threshold' | 'chat' | 'stego' | 'slack';
@@ -2271,6 +2272,9 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
           </div>
         </div>
       </footer>
+
+      {/* Spider-Man & Web Animation (Interactive on Landing, subtle light web on Terminal) */}
+      <SpidermanAgent isLanding={activeTab === 'landing'} />
     </div>
   );
 }
