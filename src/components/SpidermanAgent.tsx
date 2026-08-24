@@ -183,117 +183,123 @@ export function SpidermanAgent({ isLanding = true }: SpidermanAgentProps) {
       {/* ========================================================================= */}
       {isLanding && (
         <div
-          className="fixed top-0 left-[14%] sm:left-[15%] z-40 select-none cursor-pointer"
+          className="fixed top-0 left-[13%] sm:left-[14%] z-40 select-none cursor-pointer"
         >
           {/* Pendular Sway Assembly */}
-          <div className="flex flex-col items-center animate-spidey-hang">
-            
-            {/* Top Ceiling Anchor Web Splat */}
-            <div className="relative w-8 h-3 flex items-center justify-center">
-              <div className="w-6 h-2 bg-purple-400/40 rounded-full blur-[1px]" />
-              <div className="absolute w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#ffffff]" />
+          <div
+            onClick={handleClickSpiderman}
+            className="flex flex-col items-center animate-spidey-hang group"
+            title="Click Spider-Man to decrypt his secret key! 🕷️"
+          >
+            {/* Cute Floating "Hiee!" Speech Bubble */}
+            <div className="absolute left-20 top-[148px] px-3 py-1 rounded-xl bg-purple-900/90 border border-purple-400/60 shadow-[0_4px_16px_rgba(0,0,0,0.8)] text-white text-xs font-mono font-bold flex items-center gap-1.5 animate-bounce pointer-events-none z-50">
+              <span className="text-purple-300">Hiee!</span>
+              <span>👋</span>
+              {/* Pointer arrow to Spidey */}
+              <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-purple-900 border-l border-b border-purple-400/60 rotate-45" />
             </div>
 
-            {/* Glowing Spider Silk Hanging Webline */}
-            <div
-              className="relative w-[3px] h-[135px] bg-gradient-to-b from-white via-purple-200 to-white shadow-[0_0_10px_rgba(255,255,255,0.9)]"
+            {/* Unified SVG: Glowing Anchor + Silk Rope + Spider-Man Holding Rope */}
+            <svg
+              className="w-32 h-[260px] drop-shadow-[0_8px_20px_rgba(239,68,68,0.6)] overflow-visible"
+              viewBox="0 0 120 260"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <div className="absolute inset-0 bg-purple-400/50 opacity-70" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.8) 3px, rgba(255,255,255,0.8) 6px)' }} />
-            </div>
+              {/* 1. TOP CEILING ANCHOR SPLAT */}
+              <ellipse cx="45" cy="4" rx="14" ry="4" fill="rgba(192, 132, 252, 0.4)" />
+              <circle cx="45" cy="4" r="3" fill="#ffffff" />
 
-            {/* Spider-Man Character Hanging by His Hands */}
-            <div
-              onClick={handleClickSpiderman}
-              className="relative w-24 h-32 flex items-center justify-center group hover:scale-105 transition-transform -mt-2"
-              title="Click Spider-Man to decrypt his secret key! 🕷️"
-            >
-              {/* Cute Floating "Hiee!" Speech Bubble */}
-              <div className="absolute -right-16 top-6 px-3 py-1 rounded-xl bg-purple-900/90 border border-purple-400/60 shadow-[0_4px_16px_rgba(0,0,0,0.8)] text-white text-xs font-mono font-bold flex items-center gap-1.5 animate-bounce pointer-events-none">
-                <span className="text-purple-300">Hiee!</span>
-                <span>👋</span>
-                {/* Pointer arrow to Spidey */}
-                <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-purple-900 border-l border-b border-purple-400/60 rotate-45" />
-              </div>
+              {/* 2. GLOWING SPIDER SILK ROPE (Directly drops into Left Hand at x:45, y:150) */}
+              <line
+                x1="45"
+                y1="4"
+                x2="45"
+                y2="152"
+                stroke="#ffffff"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                className="drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]"
+              />
+              <line
+                x1="45"
+                y1="4"
+                x2="45"
+                y2="152"
+                stroke="#c084fc"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+                opacity="0.8"
+              />
 
-              {/* Full-Body SVG Spider-Man Hanging By His Hands */}
-              <svg
-                className="w-full h-full drop-shadow-[0_8px_20px_rgba(239,68,68,0.7)]"
-                viewBox="0 0 100 130"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* 1. Web strand continuation straight into left gripping hand */}
-                <line x1="28" y1="0" x2="28" y2="30" stroke="#ffffff" strokeWidth="3" opacity="0.95" />
+              {/* 3. LEFT HAND & ARM CLAMPED DIRECTLY ONTO THE ROPE */}
+              {/* Left Hand Knuckles wrapped around the rope */}
+              <ellipse cx="45" cy="150" rx="5" ry="4.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+              {/* Left Arm extending from Left Shoulder (x:45, y:176) straight UP to Hand (x:45, y:150) */}
+              <path d="M 40 152 L 35 178 L 47 180 L 50 154 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
 
-                {/* 2. LEFT ARM & HAND HOLDING THE ROPE (Cleanly to the Left of Head) */}
-                {/* Left Hand Gripping the webline */}
-                <ellipse cx="28" cy="28" rx="4.5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-                {/* Left Arm extending from left shoulder (x:36, y:56) up to hand (x:28, y:28) */}
-                <path d="M 26 30 L 34 56 L 42 54 L 32 26 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+              {/* 4. RIGHT ARM & HAND WAVING (Cleanly to the Right of Head) */}
+              <g className="animate-spidey-wave">
+                {/* Right Arm reaching UP & OUT */}
+                <path d="M 76 176 L 90 162 L 98 148 L 92 144 L 84 156 L 70 170 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+                {/* Right Waving Palm */}
+                <ellipse cx="98" cy="146" rx="5.5" ry="4.5" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
+                {/* Waving Fingers */}
+                <path d="M 96 142 L 98 136 M 99 142 L 102 137 M 101 144 L 106 140 M 95 146 L 93 144" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+              </g>
 
-                {/* 3. RIGHT ARM & HAND WAVING (Cleanly to the Right of Head) */}
-                <g className="animate-spidey-wave">
-                  {/* Right Arm extending from right shoulder (x:64, y:54) up-right */}
-                  <path d="M 64 54 L 78 40 L 86 28 L 80 24 L 72 36 L 58 50 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-                  {/* Right Waving Palm */}
-                  <ellipse cx="85" cy="26" rx="5" ry="4" fill="#dc2626" stroke="#000000" strokeWidth="1.5" />
-                  {/* Waving Fingers */}
-                  <path d="M 83 22 L 85 17 M 86 22 L 89 18 M 88 24 L 93 21 M 82 26 L 80 24" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
-                </g>
+              {/* 5. HEAD & SPIDER MASK (Centered and Completely Unobstructed) */}
+              <ellipse
+                cx="62"
+                cy="166"
+                rx="14"
+                ry="17"
+                fill="#dc2626"
+                stroke="#000000"
+                strokeWidth="2.2"
+              />
 
-                {/* 4. HEAD & SPIDER MASK (Centered and Unobstructed) */}
-                <ellipse
-                  cx="50"
-                  cy="46"
-                  rx="14"
-                  ry="17"
-                  fill="#dc2626"
-                  stroke="#000000"
-                  strokeWidth="2.2"
-                />
+              {/* Mask Webbing Lines */}
+              <line x1="62" y1="149" x2="62" y2="183" stroke="#000000" strokeWidth="1" opacity="0.5" />
+              <line x1="48" y1="166" x2="76" y2="166" stroke="#000000" strokeWidth="1" opacity="0.5" />
+              <ellipse cx="62" cy="166" rx="9" ry="10" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
 
-                {/* Mask Webbing Lines */}
-                <line x1="50" y1="29" x2="50" y2="63" stroke="#000000" strokeWidth="1" opacity="0.5" />
-                <line x1="36" y1="46" x2="64" y2="46" stroke="#000000" strokeWidth="1" opacity="0.5" />
-                <ellipse cx="50" cy="46" rx="9" ry="10" stroke="#000000" strokeWidth="1" opacity="0.4" fill="none" />
+              {/* Large Angled White Spidey Eyes */}
+              {/* Left Eye */}
+              <path
+                d="M 58 164 Q 54 158 50 160 Q 48 167 56 172 Q 59 170 58 164 Z"
+                fill="#ffffff"
+                stroke="#000000"
+                strokeWidth="2.2"
+              />
+              {/* Right Eye */}
+              <path
+                d="M 66 164 Q 70 158 74 160 Q 76 167 68 172 Q 65 170 66 164 Z"
+                fill="#ffffff"
+                stroke="#000000"
+                strokeWidth="2.2"
+              />
 
-                {/* Large Angled White Spidey Eyes */}
-                {/* Left Eye */}
-                <path
-                  d="M 46 44 Q 42 38 38 40 Q 36 47 44 52 Q 47 50 46 44 Z"
-                  fill="#ffffff"
-                  stroke="#000000"
-                  strokeWidth="2.2"
-                />
-                {/* Right Eye */}
-                <path
-                  d="M 54 44 Q 58 38 62 40 Q 64 47 56 52 Q 53 50 54 44 Z"
-                  fill="#ffffff"
-                  stroke="#000000"
-                  strokeWidth="2.2"
-                />
+              {/* 6. TORSO & RED/BLUE SUIT */}
+              {/* Blue Side Panels */}
+              <path d="M 46 178 L 50 206 L 74 206 L 78 178 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+              {/* Red Center Vest */}
+              <path d="M 54 178 L 52 206 L 72 206 L 70 178 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+              {/* Chest Spider Emblem */}
+              <ellipse cx="62" cy="190" rx="2.5" ry="3.5" fill="#000000" />
+              <path d="M 62 188 L 55 183 M 62 190 L 54 190 M 62 192 L 56 198 M 62 188 L 69 183 M 62 190 L 70 190 M 62 192 L 68 198" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
 
-                {/* 5. TORSO & RED/BLUE SUIT */}
-                {/* Blue Side Panels */}
-                <path d="M 34 58 L 38 86 L 62 86 L 66 58 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-                {/* Red Center Vest */}
-                <path d="M 42 58 L 40 86 L 60 86 L 58 58 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-                {/* Chest Spider Emblem */}
-                <ellipse cx="50" cy="70" rx="2.5" ry="3.5" fill="#000000" />
-                <path d="M 50 68 L 43 63 M 50 70 L 42 70 M 50 72 L 44 78 M 50 68 L 57 63 M 50 70 L 58 70 M 50 72 L 56 78" stroke="#000000" strokeWidth="1.2" strokeLinecap="round" />
+              {/* 7. LEGS & RED BOOTS HANGING FREELY BELOW */}
+              {/* Left Leg */}
+              <path d="M 50 206 L 44 224 L 38 238 L 50 240 L 54 226 L 58 208 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+              {/* Left Red Boot */}
+              <path d="M 44 224 L 38 238 L 50 240 L 54 226 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
 
-                {/* 6. LEGS & RED BOOTS HANGING FREELY BELOW */}
-                {/* Left Leg */}
-                <path d="M 38 86 L 32 104 L 26 118 L 38 120 L 42 106 L 46 88 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-                {/* Left Red Boot */}
-                <path d="M 32 104 L 26 118 L 38 120 L 42 106 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-
-                {/* Right Leg */}
-                <path d="M 62 86 L 68 104 L 74 118 L 62 120 L 58 106 L 54 88 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
-                {/* Right Red Boot */}
-                <path d="M 68 104 L 74 118 L 62 120 L 58 106 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-              </svg>
-            </div>
+              {/* Right Leg */}
+              <path d="M 74 206 L 80 224 L 86 238 L 74 240 L 70 226 L 66 208 Z" fill="#2563eb" stroke="#000000" strokeWidth="2" />
+              {/* Right Red Boot */}
+              <path d="M 80 224 L 86 238 L 74 240 L 70 226 Z" fill="#dc2626" stroke="#000000" strokeWidth="2" />
+            </svg>
           </div>
 
           {/* Interactive Decryption Card (Opens upon clicking Spider-Man or "Hiee!") */}
