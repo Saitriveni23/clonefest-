@@ -102,6 +102,8 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const videoChunksRef = useRef<Blob[]>([]);
   const videoTimerRef = useRef<any>(null);
   const videoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const payloadFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
 
   // System Log state
   const [logs, setLogs] = useState<string[]>([
@@ -969,12 +971,12 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     ]);
   };
 
-  // File Upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploaded = e.target.files?.[0];
+  // File Upload Processor
+  const processPayloadFile = (uploaded: File) => {
     if (!uploaded) return;
-    if (uploaded.size > 700 * 1024) {
-      setToast({ message: 'File must be under 700KB.', type: 'error' });
+    if (uploaded.size > 10 * 1024 * 1024) {
+      setToast({ message: 'File must be under 10MB.', type: 'error' });
+      addLog(`[ERR] file size (${(uploaded.size / (1024 * 1024)).toFixed(1)} MB) exceeds 10MB limit`);
       return;
     }
     const reader = new FileReader();
@@ -988,7 +990,20 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       addLog(`> attached file: ${uploaded.name} (${(uploaded.size / 1024).toFixed(1)} KB)`);
       setToast({ message: `File "${uploaded.name}" attached.`, type: 'success' });
     };
+    reader.onerror = () => {
+      setToast({ message: 'Failed to read file from disk.', type: 'error' });
+      addLog(`[ERR] failed to read file: ${uploaded.name}`);
+    };
     reader.readAsDataURL(uploaded);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploaded = e.target.files?.[0];
+    if (uploaded) {
+      processPayloadFile(uploaded);
+    }
+    // Reset so same file can be selected again
+    e.target.value = '';
   };
 
 
@@ -1735,16 +1750,39 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                           </button>
                         </div>
                       ) : (
-                        <label className="block p-6 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5 text-center cursor-pointer transition-all">
-                          <Upload className="w-7 h-7 text-purple-400 mx-auto mb-2" />
+                        <div
+                          onClick={() => payloadFileInputRef.current?.click()}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsFileDragOver(true);
+                          }}
+                          onDragLeave={() => setIsFileDragOver(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsFileDragOver(false);
+                            const dropped = e.dataTransfer.files?.[0];
+                            if (dropped) processPayloadFile(dropped);
+                          }}
+                          className={`block p-6 rounded-2xl border-2 border-dashed text-center cursor-pointer transition-all ${
+                            isFileDragOver
+                              ? 'border-purple-400 bg-purple-500/20 scale-[1.01]'
+                              : 'border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5'
+                          }`}
+                        >
+                          <input
+                            ref={payloadFileInputRef}
+                            type="file"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                          <Upload className={`w-7 h-7 mx-auto mb-2 transition-transform ${isFileDragOver ? 'text-purple-300 scale-110' : 'text-purple-400'}`} />
                           <span className="text-xs font-bold text-white block">
-                            Upload Encrypted Payload File
+                            {isFileDragOver ? 'Drop File to Encrypt' : 'Upload Encrypted Payload File'}
                           </span>
                           <span className="text-[11px] text-[#5c5c80] block mt-1">
-                            Max size 700KB. Any file type.
+                            Click or drag & drop. Max size 10MB. Any file type.
                           </span>
-                          <input type="file" onChange={handleFileUpload} className="hidden" />
-                        </label>
+                        </div>
                       )}
 
                       {/* Quick Media Recording Shortcuts */}
