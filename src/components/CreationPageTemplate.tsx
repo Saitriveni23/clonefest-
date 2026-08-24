@@ -1424,7 +1424,44 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                       <span>Manage Capsule</span>
                     </a>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-600/30"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Create Another Capsule</span>
+                  </button>
                 </div>
+
+                {/* Shamir Shards (if Paranoid Mode) */}
+                {createdCapsule.isShamir && createdCapsule.shares && createdCapsule.shares.length > 0 && (
+                  <div className="max-w-xl mx-auto space-y-2 text-left p-4 rounded-2xl bg-purple-950/30 border border-purple-500/20">
+                    <span className="text-[11px] font-bold text-purple-300 block">
+                      Shamir Custodian Key Shards (2-of-3 required to decrypt)
+                    </span>
+                    <div className="space-y-1.5">
+                      {createdCapsule.shares.map((shard, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-purple-500/20 text-xs font-mono">
+                          <span className="text-[#9b9bbf] text-[10px] shrink-0 font-bold">Shard #{idx + 1}:</span>
+                          <span className="text-teal-300 truncate text-[11px] select-all">{shard}</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(shard);
+                              setToast({ message: `Shard #${idx + 1} copied!`, type: 'success' });
+                            }}
+                            className="p-1 hover:text-white text-[#9b9bbf] shrink-0"
+                            title="Copy Shard"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Metadata Row */}
                 <div
@@ -1470,8 +1507,9 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
               </div>
             )}
 
-            {/* 3-COLUMN MAIN TERMINAL LAYOUT */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* 3-COLUMN MAIN TERMINAL LAYOUT - Hidden when capsule is created */}
+            {!createdCapsule && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
               {/* -------------------------------------------------- */}
               {/* COLUMN 1 (LEFT): SYSTEM_LOG Terminal (4 cols)      */}
@@ -2352,6 +2390,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
 
