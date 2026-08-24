@@ -67,6 +67,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const [title, setTitle] = useState('');
   const [codeLanguage, setCodeLanguage] = useState('javascript');
   const [file, setFile] = useState<FileAttachment | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
 
   // Protections
   const [passwordProtection, setPasswordProtection] = useState(false);
@@ -183,6 +184,63 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
     }
   }, [inputMode]);
 
+  // Convert attached file data to Blob ObjectURL for flawless preview playback
+  useEffect(() => {
+    if (!file?.data) {
+      setPreviewObjectUrl(null);
+      return;
+    }
+
+    const rawData = file.data;
+    if (rawData.startsWith('data:')) {
+      try {
+        const parts = rawData.split(',');
+        const mimeHeader = parts[0];
+        const base64Data = parts[1];
+
+        let mimeType = 'video/mp4';
+        const match = mimeHeader.match(/:(.*?);/);
+        if (match && match[1]) {
+          mimeType = match[1].split(';')[0].trim();
+        } else if (file.type) {
+          mimeType = file.type.split(';')[0].trim();
+        }
+
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const blob = new Blob([byteNumbers], { type: mimeType });
+        const objectUrl = URL.createObjectURL(blob);
+        setPreviewObjectUrl(objectUrl);
+
+        return () => {
+          URL.revokeObjectURL(objectUrl);
+        };
+      } catch (e) {
+        console.warn('Failed to convert preview base64 to ObjectURL:', e);
+        setPreviewObjectUrl(rawData);
+      }
+    } else {
+      setPreviewObjectUrl(rawData);
+    }
+  }, [file?.data, file?.type]);
+
+  // Synchronize live camera stream to video viewfinder whenever camera state becomes active
+  useEffect(() => {
+    if (isCameraActive && videoStreamRef.current && videoLiveRef.current) {
+      if (videoLiveRef.current.srcObject !== videoStreamRef.current) {
+        videoLiveRef.current.srcObject = videoStreamRef.current;
+      }
+      videoLiveRef.current.muted = true;
+      videoLiveRef.current.playsInline = true;
+      videoLiveRef.current.play().catch(err => {
+        console.warn('Viewfinder play warning:', err);
+      });
+    }
+  }, [isCameraActive]);
+
   // Clean up all streams on unmount
   useEffect(() => {
     return () => {
@@ -193,53 +251,55 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
       }
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(t => t.stop());
-      }
     };
   }, []);
 
-  // Voice recording handlers
+  // Audio recording handlers
   const startRecording = async () => {
     try {
-      if (isRecording) stopRecording();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
 
-      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/wav'];
       const selectedMime = mimeTypes.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || 'audio/webm';
-
-      const options: any = { mimeType: selectedMime };
-      try {
-        options.audioBitsPerSecond = 24000; // 24 kbps opus is crisp for speech and ultra compact
-      } catch (e) {}
-
+      
+      const options = { mimeType: selectedMime };
       const recorder = new MediaRecorder(stream, options);
+
       audioChunksRef.current = [];
+
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
       };
+
       recorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: selectedMime });
+        const ext = selectedMime.includes('mp4') ? 'mp4' : selectedMime.includes('ogg') ? 'ogg' : selectedMime.includes('wav') ? 'wav' : 'webm';
         const reader = new FileReader();
         reader.onload = () => {
           setFile({
-            name: 'classified_voice_note.webm',
+            name: `classified_voice_memo.${ext}`,
             type: selectedMime,
             size: audioBlob.size,
             data: reader.result as string
           });
-          addLog(`> attached voice memo: ${(audioBlob.size / 1024).toFixed(1)} KB`);
-          setToast({ message: 'Voice memo recorded successfully!', type: 'success' });
+          addLog(`> attached voice capsule: ${(audioBlob.size / 1024).toFixed(1)} KB`);
+          setToast({ message: 'Encrypted voice memo recorded!', type: 'success' });
+          if (audioStreamRef.current) {
+            audioStreamRef.current.getTracks().forEach(t => t.stop());
+            audioStreamRef.current = null;
+          }
         };
         reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach(t => t.stop());
-        audioStreamRef.current = null;
       };
+
       mediaRecorderRef.current = recorder;
       recorder.start(500);
       setIsRecording(true);
       setRecordingDuration(0);
+
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(prev => {
           if (prev >= 59) {
@@ -249,10 +309,11 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
           return prev + 1;
         });
       }, 1000);
-      addLog('> voice memo recording started [MAX 60s]...');
-    } catch (err) {
-      console.error(err);
-      setToast({ message: 'Microphone access denied.', type: 'error' });
+
+      addLog('> voice recording started [MAX 60s]...');
+    } catch (err: any) {
+      console.error('Recording start error:', err);
+      setToast({ message: 'Microphone access denied: ' + (err.message || 'Please check browser permissions'), type: 'error' });
       addLog('> [ERR] microphone access denied');
     }
   };
@@ -272,23 +333,29 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const startCamera = async () => {
     try {
       stopCamera();
-      let stream: MediaStream;
+      let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
           audio: true
         });
       } catch (e) {
-        // Fallback: try basic video with audio, or video-only if audio fails
+        // Fallback 1: video + audio without resolution constraint
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         } catch (e2) {
+          // Fallback 2: video only
           stream = await navigator.mediaDevices.getUserMedia({ video: true });
         }
       }
 
+      if (!stream) {
+        throw new Error('No camera stream available');
+      }
+
       videoStreamRef.current = stream;
       setIsCameraActive(true);
+
       if (videoLiveRef.current) {
         videoLiveRef.current.srcObject = stream;
         videoLiveRef.current.muted = true;
@@ -300,60 +367,81 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       addLog('> camera viewfinder active [READY]');
     } catch (err: any) {
       console.error('Camera access error:', err);
-      setToast({ message: 'Camera access denied. Please allow camera permissions in your browser.', type: 'error' });
+      setToast({ message: 'Camera access denied or unavailable. Please allow camera permissions in your browser.', type: 'error' });
       addLog('> [ERR] camera access denied or unavailable');
     }
   };
 
   const startVideoRecording = async () => {
+    if (isVideoRecording || (videoRecorderRef.current && videoRecorderRef.current.state === 'recording')) {
+      return;
+    }
+
     try {
       let stream = videoStreamRef.current;
-      if (!stream || !stream.active || stream.getVideoTracks().length === 0) {
+      const isStreamActive = stream && stream.active && stream.getVideoTracks().some(t => t.readyState === 'live');
+
+      if (!isStreamActive) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 } },
             audio: true
           });
         } catch (e) {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          } catch (e2) {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
         }
         videoStreamRef.current = stream;
         setIsCameraActive(true);
-        if (videoLiveRef.current) {
-          videoLiveRef.current.srcObject = stream;
-          videoLiveRef.current.muted = true;
-          videoLiveRef.current.playsInline = true;
-          try {
-            await videoLiveRef.current.play();
-          } catch (e) {}
-        }
+      }
+
+      if (!stream) {
+        throw new Error('Camera stream is not available');
+      }
+
+      if (videoLiveRef.current && videoLiveRef.current.srcObject !== stream) {
+        videoLiveRef.current.srcObject = stream;
+        videoLiveRef.current.muted = true;
+        videoLiveRef.current.playsInline = true;
+        try {
+          await videoLiveRef.current.play();
+        } catch (e) {}
       }
 
       // Safe MediaRecorder instantiation with codec negotiation
       const candidateMimes = [
         'video/mp4;codecs=avc1,mp4a.40.2',
         'video/mp4',
-        'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
         'video/webm'
       ];
 
       let recorder: MediaRecorder | null = null;
-      let selectedMime = 'video/mp4';
+      let selectedMime = '';
 
-      for (const mime of candidateMimes) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) {
-          try {
-            recorder = new MediaRecorder(stream, { mimeType: mime });
-            selectedMime = mime;
-            break;
-          } catch (e) {}
+      if (typeof MediaRecorder !== 'undefined') {
+        for (const mime of candidateMimes) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) {
+            try {
+              recorder = new MediaRecorder(stream, { mimeType: mime });
+              selectedMime = mime;
+              break;
+            } catch (e) {}
+          }
         }
       }
 
       if (!recorder) {
-        recorder = new MediaRecorder(stream);
-        selectedMime = recorder.mimeType || 'video/mp4';
+        try {
+          recorder = new MediaRecorder(stream);
+          selectedMime = recorder.mimeType || '';
+        } catch (e: any) {
+          throw new Error('MediaRecorder not supported on this browser: ' + (e.message || ''));
+        }
       }
 
       videoChunksRef.current = [];
@@ -365,34 +453,54 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       };
 
       recorder.onstop = () => {
-        const videoBlob = new Blob(videoChunksRef.current, { type: selectedMime });
+        setTimeout(() => {
+          const chunks = videoChunksRef.current;
+          const cleanMime = (selectedMime || recorder?.mimeType || chunks[0]?.type || 'video/mp4').split(';')[0].trim();
+          const videoBlob = new Blob(chunks, { type: cleanMime });
 
-        if (videoBlob.size > 700 * 1024) {
-          setToast({
-            message: `Video size (${(videoBlob.size / 1024).toFixed(0)}KB) exceeds 700KB limit. Please record a shorter clip.`,
-            type: 'error'
-          });
-          return;
-        }
+          if (videoBlob.size === 0) {
+            setToast({ message: 'Recording stopped before video data was captured. Please hold for at least 1-2 seconds.', type: 'error' });
+            return;
+          }
 
-        const ext = selectedMime.includes('mp4') ? 'mp4' : 'webm';
-        const reader = new FileReader();
-        reader.onload = () => {
-          setFile({
-            name: `classified_video_memo.${ext}`,
-            type: selectedMime,
-            size: videoBlob.size,
-            data: reader.result as string
-          });
-          addLog(`> attached video capsule: ${(videoBlob.size / 1024).toFixed(1)} KB`);
-          setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
-          stopCamera();
-        };
-        reader.readAsDataURL(videoBlob);
+          if (videoBlob.size > 10 * 1024 * 1024) {
+            setToast({
+              message: `Video size (${(videoBlob.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit. Please record a shorter clip.`,
+              type: 'error'
+            });
+            return;
+          }
+
+          const ext = cleanMime.includes('webm') ? 'webm' : 'mp4';
+          const reader = new FileReader();
+          reader.onload = () => {
+            setFile({
+              name: `classified_video_memo.${ext}`,
+              type: cleanMime,
+              size: videoBlob.size,
+              data: reader.result as string
+            });
+            addLog(`> attached video capsule: ${(videoBlob.size / 1024).toFixed(1)} KB`);
+            setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
+            stopCamera();
+          };
+          reader.readAsDataURL(videoBlob);
+        }, 80);
       };
 
       videoRecorderRef.current = recorder;
-      recorder.start(1000);
+      
+      // Start recording: WebM supports timeslices; MP4/Safari performs best with continuous buffer flush on stop
+      try {
+        if (selectedMime.includes('webm')) {
+          recorder.start(500);
+        } else {
+          recorder.start();
+        }
+      } catch (e) {
+        recorder.start();
+      }
+
       setIsVideoRecording(true);
       setVideoRecordingDuration(0);
 
@@ -411,15 +519,15 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
       console.error('Video recording start error:', err);
       setToast({ message: 'Failed to start video recording: ' + (err.message || 'Check browser permissions'), type: 'error' });
       addLog('> [ERR] video recording error: ' + (err.message || 'unknown'));
+      setIsVideoRecording(false);
     }
   };
 
   const stopVideoRecording = () => {
     if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
       try {
-        videoRecorderRef.current.requestData();
+        videoRecorderRef.current.stop();
       } catch (e) {}
-      videoRecorderRef.current.stop();
       setIsVideoRecording(false);
       if (videoTimerRef.current) {
         clearInterval(videoTimerRef.current);
@@ -431,8 +539,8 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
   const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploaded = e.target.files?.[0];
     if (!uploaded) return;
-    if (uploaded.size > 700 * 1024) {
-      setToast({ message: `Video must be under 700KB (Selected: ${(uploaded.size / 1024).toFixed(0)}KB).`, type: 'error' });
+    if (uploaded.size > 10 * 1024 * 1024) {
+      setToast({ message: `Video must be under 10MB (Selected: ${(uploaded.size / (1024 * 1024)).toFixed(1)}MB).`, type: 'error' });
       return;
     }
     const reader = new FileReader();
@@ -1867,7 +1975,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                             <video
                               controls
                               playsInline
-                              src={file.data}
+                              src={previewObjectUrl || file.data}
                               className="w-full h-full object-contain rounded-xl"
                             />
                           </div>
@@ -1893,7 +2001,15 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                           {/* Cyber Viewfinder with HUD */}
                           <div className="relative rounded-xl overflow-hidden bg-black border border-purple-500/30 aspect-video flex items-center justify-center group">
                             <video
-                              ref={videoLiveRef}
+                              ref={(el) => {
+                                videoLiveRef.current = el;
+                                if (el && videoStreamRef.current && el.srcObject !== videoStreamRef.current) {
+                                  el.srcObject = videoStreamRef.current;
+                                  el.muted = true;
+                                  el.playsInline = true;
+                                  el.play().catch(() => {});
+                                }
+                              }}
                               autoPlay
                               playsInline
                               muted
@@ -1988,7 +2104,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                           <div className="space-y-1">
                             <h4 className="text-sm font-bold text-white">Record or Attach Secure Video Capsule</h4>
                             <p className="text-xs text-[#9b9bbf] max-w-xs mx-auto">
-                              Record live from your camera (Max 30s) or upload an existing video clip (Max 700KB).
+                              Record live from your camera (Max 30s) or upload an existing video clip (Max 10MB).
                             </p>
                           </div>
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
@@ -2007,7 +2123,7 @@ export function CreationPageTemplate({ defaultMethod = 'direct' }: CreationPageT
                               className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold flex items-center justify-center gap-2 border border-purple-500/30 cursor-pointer active:scale-95 transition-all"
                             >
                               <Upload className="w-4 h-4 text-purple-400" />
-                              <span>Upload Video File (700KB)</span>
+                              <span>Upload Video File (10MB)</span>
                             </button>
                           </div>
                         </div>

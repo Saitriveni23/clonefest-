@@ -315,6 +315,7 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
   const videoChunksRef = useRef<Blob[]>([]);
   const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Stop camera stream safely
   const stopCamera = () => {
     if (videoStreamRef.current) {
       videoStreamRef.current.getTracks().forEach(t => t.stop());
@@ -331,10 +332,24 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
     }
   };
 
+  // Synchronize live camera stream to video viewfinder whenever camera state becomes active
+  useEffect(() => {
+    if (isCameraActive && videoStreamRef.current && videoLiveRef.current) {
+      if (videoLiveRef.current.srcObject !== videoStreamRef.current) {
+        videoLiveRef.current.srcObject = videoStreamRef.current;
+      }
+      videoLiveRef.current.muted = true;
+      videoLiveRef.current.playsInline = true;
+      videoLiveRef.current.play().catch(err => {
+        console.warn('Viewfinder play warning:', err);
+      });
+    }
+  }, [isCameraActive]);
+
   const startCamera = async () => {
     try {
       stopCamera();
-      let stream: MediaStream;
+      let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
@@ -348,8 +363,13 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
         }
       }
 
+      if (!stream) {
+        throw new Error('No camera stream available');
+      }
+
       videoStreamRef.current = stream;
       setIsCameraActive(true);
+
       if (videoLiveRef.current) {
         videoLiveRef.current.srcObject = stream;
         videoLiveRef.current.muted = true;
@@ -360,58 +380,79 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
       }
     } catch (err: any) {
       console.error('Camera access error:', err);
-      setToast({ message: 'Camera access denied. Please check browser permissions.', type: 'error' });
+      setToast({ message: 'Camera access denied or unavailable. Please check browser permissions.', type: 'error' });
     }
   };
 
   const startVideoRecording = async () => {
+    if (isVideoRecording || (videoRecorderRef.current && videoRecorderRef.current.state === 'recording')) {
+      return;
+    }
+
     try {
       let stream = videoStreamRef.current;
-      if (!stream || !stream.active || stream.getVideoTracks().length === 0) {
+      const isStreamActive = stream && stream.active && stream.getVideoTracks().some(t => t.readyState === 'live');
+
+      if (!isStreamActive) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 } },
             audio: true
           });
         } catch (e) {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          } catch (e2) {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
         }
         videoStreamRef.current = stream;
         setIsCameraActive(true);
-        if (videoLiveRef.current) {
-          videoLiveRef.current.srcObject = stream;
-          videoLiveRef.current.muted = true;
-          videoLiveRef.current.playsInline = true;
-          try {
-            await videoLiveRef.current.play();
-          } catch (e) {}
-        }
+      }
+
+      if (!stream) {
+        throw new Error('Camera stream is not available');
+      }
+
+      if (videoLiveRef.current && videoLiveRef.current.srcObject !== stream) {
+        videoLiveRef.current.srcObject = stream;
+        videoLiveRef.current.muted = true;
+        videoLiveRef.current.playsInline = true;
+        try {
+          await videoLiveRef.current.play();
+        } catch (e) {}
       }
 
       const candidateMimes = [
         'video/mp4;codecs=avc1,mp4a.40.2',
         'video/mp4',
-        'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
         'video/webm'
       ];
 
       let recorder: MediaRecorder | null = null;
-      let selectedMime = 'video/mp4';
+      let selectedMime = '';
 
-      for (const mime of candidateMimes) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) {
-          try {
-            recorder = new MediaRecorder(stream, { mimeType: mime });
-            selectedMime = mime;
-            break;
-          } catch (e) {}
+      if (typeof MediaRecorder !== 'undefined') {
+        for (const mime of candidateMimes) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) {
+            try {
+              recorder = new MediaRecorder(stream, { mimeType: mime });
+              selectedMime = mime;
+              break;
+            } catch (e) {}
+          }
         }
       }
 
       if (!recorder) {
-        recorder = new MediaRecorder(stream);
-        selectedMime = recorder.mimeType || 'video/mp4';
+        try {
+          recorder = new MediaRecorder(stream);
+          selectedMime = recorder.mimeType || '';
+        } catch (e: any) {
+          throw new Error('MediaRecorder not supported on this browser: ' + (e.message || ''));
+        }
       }
 
       videoChunksRef.current = [];
@@ -423,32 +464,53 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
       };
 
       recorder.onstop = () => {
-        const videoBlob = new Blob(videoChunksRef.current, { type: selectedMime });
-        if (videoBlob.size > 700 * 1024) {
-          setToast({
-            message: `Video size (${(videoBlob.size / 1024).toFixed(0)}KB) exceeds 700KB limit. Please record a shorter clip.`,
-            type: 'error'
-          });
-          return;
-        }
+        setTimeout(() => {
+          const chunks = videoChunksRef.current;
+          const cleanMime = (selectedMime || recorder?.mimeType || chunks[0]?.type || 'video/mp4').split(';')[0].trim();
+          const videoBlob = new Blob(chunks, { type: cleanMime });
 
-        const ext = selectedMime.includes('mp4') ? 'mp4' : 'webm';
-        const reader = new FileReader();
-        reader.onload = () => {
-          setFile({
-            name: `video_memo.${ext}`,
-            type: selectedMime,
-            size: videoBlob.size,
-            data: reader.result as string
-          });
-          setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
-          stopCamera();
-        };
-        reader.readAsDataURL(videoBlob);
+          if (videoBlob.size === 0) {
+            setToast({ message: 'Recording stopped before video data was captured. Please hold for at least 1-2 seconds.', type: 'error' });
+            return;
+          }
+
+          if (videoBlob.size > 10 * 1024 * 1024) {
+            setToast({
+              message: `Video size (${(videoBlob.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit. Please record a shorter clip.`,
+              type: 'error'
+            });
+            return;
+          }
+
+          const ext = cleanMime.includes('webm') ? 'webm' : 'mp4';
+          const reader = new FileReader();
+          reader.onload = () => {
+            setFile({
+              name: `video_memo.${ext}`,
+              type: cleanMime,
+              size: videoBlob.size,
+              data: reader.result as string
+            });
+            setToast({ message: 'Encrypted video capsule recorded!', type: 'success' });
+            stopCamera();
+          };
+          reader.readAsDataURL(videoBlob);
+        }, 80);
       };
 
       videoRecorderRef.current = recorder;
-      recorder.start(1000);
+
+      // Start recording: WebM supports timeslices; MP4/Safari performs best with continuous buffer flush on stop
+      try {
+        if (selectedMime.includes('webm')) {
+          recorder.start(500);
+        } else {
+          recorder.start();
+        }
+      } catch (e) {
+        recorder.start();
+      }
+
       setIsVideoRecording(true);
       setVideoRecordingDuration(0);
 
@@ -462,14 +524,17 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
         });
       }, 1000);
     } catch (err: any) {
-      console.error(err);
+      console.error('Video recording start error:', err);
       setToast({ message: 'Failed to start video recording: ' + (err.message || 'Check browser permissions'), type: 'error' });
+      setIsVideoRecording(false);
     }
   };
 
   const stopVideoRecording = () => {
     if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
-      videoRecorderRef.current.stop();
+      try {
+        videoRecorderRef.current.stop();
+      } catch (e) {}
       setIsVideoRecording(false);
       if (videoTimerRef.current) {
         clearInterval(videoTimerRef.current);
@@ -1739,7 +1804,15 @@ export function PasteForm({ defaultMethod = 'direct' }: { defaultMethod?: 'direc
                   <div className="p-4 rounded-xl border border-purple-500/30 bg-black/80 space-y-3">
                     <div className="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center">
                       <video
-                        ref={videoLiveRef}
+                        ref={(el) => {
+                          videoLiveRef.current = el;
+                          if (el && videoStreamRef.current && el.srcObject !== videoStreamRef.current) {
+                            el.srcObject = videoStreamRef.current;
+                            el.muted = true;
+                            el.playsInline = true;
+                            el.play().catch(() => {});
+                          }
+                        }}
                         autoPlay
                         playsInline
                         muted

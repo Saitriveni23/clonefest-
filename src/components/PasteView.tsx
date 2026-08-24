@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { decryptData } from '@/lib/crypto';
 import { reconstructKey } from '@/lib/sss';
 import { 
@@ -113,6 +113,51 @@ export function PasteView({ id }: PasteViewProps) {
   const [vaporized, setVaporized] = useState(false);
   const [meltText, setMeltText] = useState(false);
   const [displayScrambledText, setDisplayScrambledText] = useState('');
+  const [mediaObjectUrl, setMediaObjectUrl] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
+
+  // Convert payload file data to Blob ObjectURL for flawless native video/audio playback
+  useEffect(() => {
+    if (!payload?.file?.data) {
+      setMediaObjectUrl(null);
+      return;
+    }
+
+    const rawData = payload.file.data;
+    if (rawData.startsWith('data:')) {
+      try {
+        const parts = rawData.split(',');
+        const mimeHeader = parts[0];
+        const base64Data = parts[1];
+
+        let mimeType = 'video/mp4';
+        const match = mimeHeader.match(/:(.*?);/);
+        if (match && match[1]) {
+          mimeType = match[1].split(';')[0].trim();
+        } else if (payload.file.type) {
+          mimeType = payload.file.type.split(';')[0].trim();
+        }
+
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const blob = new Blob([byteNumbers], { type: mimeType });
+        const objectUrl = URL.createObjectURL(blob);
+        setMediaObjectUrl(objectUrl);
+
+        return () => {
+          URL.revokeObjectURL(objectUrl);
+        };
+      } catch (e) {
+        console.warn('Failed to convert base64 to Blob ObjectURL:', e);
+        setMediaObjectUrl(rawData);
+      }
+    } else {
+      setMediaObjectUrl(rawData);
+    }
+  }, [payload?.file?.data, payload?.file?.type]);
 
   // Fetch encrypted paste from server
   useEffect(() => {
@@ -120,6 +165,9 @@ export function PasteView({ id }: PasteViewProps) {
     const hash = window.location.hash;
     const key = hash ? hash.substring(1) : '';
     setKeyHex(key);
+
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
 
     const fetchPaste = async () => {
       try {
@@ -1464,7 +1512,7 @@ export function PasteView({ id }: PasteViewProps) {
                 <video
                   controls
                   playsInline
-                  src={payload.file.data}
+                  src={mediaObjectUrl || payload.file.data}
                   className="w-full max-h-[440px] rounded-xl object-contain"
                 />
               </div>
@@ -1507,7 +1555,7 @@ export function PasteView({ id }: PasteViewProps) {
               <div className="p-4 rounded-xl bg-black/60 border border-teal-500/20 space-y-3">
                 <audio
                   controls
-                  src={payload.file.data}
+                  src={mediaObjectUrl || payload.file.data}
                   className="w-full rounded-lg"
                 />
               </div>

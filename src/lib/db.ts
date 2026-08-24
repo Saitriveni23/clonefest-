@@ -206,7 +206,16 @@ export const dbHelper = {
       };
 
       if (rawData.burn_after_read === 1) {
-        memoryPastes.delete(id);
+        if (!rawData.read_at) {
+          // First read: start a 30-second countdown so browser pre-fetch and React StrictMode double-fetch do not burn it instantly
+          updated.expires_at = now + 30000;
+          memoryPastes.set(id, updated);
+        } else if (now - rawData.read_at > 30000) {
+          memoryPastes.delete(id);
+          return null;
+        } else {
+          memoryPastes.set(id, updated);
+        }
       } else {
         memoryPastes.set(id, updated);
       }
@@ -233,9 +242,14 @@ export const dbHelper = {
       read_at: newReadAt,
     });
 
-    // If it's a burn-after-read paste, delete it immediately
+    // If it's a burn-after-read paste, set a 30-second TTL to burn it after reading
     if (row.burn_after_read === 1) {
-      await redis.del(redisKey);
+      if (!row.read_at) {
+        await redis.expire(redisKey, 30);
+      } else if (now - row.read_at > 30000) {
+        await redis.del(redisKey);
+        return null;
+      }
     }
 
     return {
